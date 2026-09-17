@@ -9,3 +9,11 @@ scrape_configs:
   - job_name: 'api-java'
     static_configs:
       - targets: ['java-service:8081']
+
+  # Condiciones y resultados de las corridas de k6.
+  # honor_labels conserva las etiquetas que envía k6; sin él Prometheus las
+  # sobrescribe con las suyas y se pierde la identidad de la corrida.
+  - job_name: 'pushgateway'
+    honor_labels: true
+    static_configs:
+      - targets: ['pushgateway:9091']

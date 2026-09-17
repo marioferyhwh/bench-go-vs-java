@@ -96,6 +96,11 @@ func (h *Handler) write(w http.ResponseWriter, status int, mode string, start ti
 	h.requests.With(labels).Inc()
 	h.latencies.With(labels).Observe(time.Since(start).Seconds())
 
+	writeJSON(w, status, body)
+}
+
+// writeJSON serializa el cuerpo como JSON con el código dado.
+func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(body); err != nil {
