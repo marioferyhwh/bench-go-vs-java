@@ -1,0 +1,11 @@
+global:
+  scrape_interval: 5s # Qué tan seguido se consultan las métricas
+
+scrape_configs:
+  - job_name: 'api-go'
+    static_configs:
+      - targets: ['go-service:8080']
+
+  - job_name: 'api-java'
+    static_configs:
+      - targets: ['java-service:8081']

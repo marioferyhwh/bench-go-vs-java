@@ -14,6 +14,7 @@ import (
 	"github.com/marioferyhwh/comparativo-tec/go-service/internal/data"
 	"github.com/marioferyhwh/comparativo-tec/go-service/internal/httpapi"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -34,6 +35,11 @@ func main() {
 	}
 
 	registry := prometheus.NewRegistry()
+	// CPU, memoria y goroutines del proceso: son la mitad Go de la comparación.
+	registry.MustRegister(
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
+		collectors.NewGoCollector(),
+	)
 	handler := httpapi.NewHandler(data.NewService(repo), registry)
 
 	mux := http.NewServeMux()
