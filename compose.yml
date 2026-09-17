@@ -23,6 +23,13 @@ services:
       - DB_MAX_IDLE_CONNS=10
     ports:
       - "8080:8080"
+    # Mismo techo de CPU y RAM que java-service: sin esto la comparación
+    # mide quién pudo acaparar más máquina, no quién es más eficiente.
+    deploy:
+      resources:
+        limits:
+          cpus: "${SERVICE_CPUS:-2}"
+          memory: "${SERVICE_MEMORY:-512m}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,6 +46,11 @@ services:
       - DB_MAX_IDLE_CONNS=10
     ports:
       - "8081:8081"
+    deploy:
+      resources:
+        limits:
+          cpus: "${SERVICE_CPUS:-2}"
+          memory: "${SERVICE_MEMORY:-512m}"
     depends_on:
       postgres:
         condition: service_healthy

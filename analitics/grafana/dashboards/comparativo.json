@@ -64,34 +64,71 @@
     },
     {
       "id": 4,
-      "title": "Memoria residente del proceso",
-      "description": "Memoria que el sistema operativo tiene reservada para cada proceso. En Java incluye el heap de la JVM más su propio overhead.",
+      "title": "Memoria total del proceso (Go vs Java)",
+      "description": "Memoria residente: todo lo que el sistema operativo reserva para el proceso. Es la única cifra comparable entre las dos tecnologías, porque mide lo mismo en ambas. Una línea por tecnología, sin desglose.",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "fieldConfig": {
-        "defaults": { "unit": "bytes", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "defaults": {
+          "unit": "bytes",
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        },
         "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
       },
       "targets": [
         {
-          "expr": "process_resident_memory_bytes{job=\"api-go\"}",
-          "legendFormat": "go — residente",
+          "expr": "sum(process_resident_memory_bytes{job=\"api-go\"})",
+          "legendFormat": "GO — total",
           "refId": "A"
         },
         {
-          "expr": "sum(jvm_memory_used_bytes{job=\"api-java\"})",
-          "legendFormat": "java — JVM usada",
+          "expr": "sum(process_resident_memory_bytes{job=\"api-java\"})",
+          "legendFormat": "JAVA — total",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Desglose de memoria por tecnología",
+      "description": "Qué hay dentro del total. En Go: heap del programa frente al residente. En Java: heap y nonheap de la JVM (el nonheap incluye metadatos de clases y el código que compila el JIT).",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "custom": { "lineWidth": 1, "fillOpacity": 5 } },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] }
+      },
+      "targets": [
+        {
+          "expr": "sum(process_resident_memory_bytes{job=\"api-go\"})",
+          "legendFormat": "GO — residente total",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(go_memstats_heap_inuse_bytes{job=\"api-go\"})",
+          "legendFormat": "GO — heap en uso",
           "refId": "B"
         },
         {
-          "expr": "go_memstats_heap_inuse_bytes{job=\"api-go\"}",
-          "legendFormat": "go — heap",
+          "expr": "sum(process_resident_memory_bytes{job=\"api-java\"})",
+          "legendFormat": "JAVA — residente total",
           "refId": "C"
         },
         {
-          "expr": "jvm_memory_used_bytes{job=\"api-java\", area=\"heap\"}",
-          "legendFormat": "java — heap {{id}}",
+          "expr": "sum(jvm_memory_used_bytes{job=\"api-java\", area=\"heap\"})",
+          "legendFormat": "JAVA — heap JVM",
           "refId": "D"
+        },
+        {
+          "expr": "sum(jvm_memory_used_bytes{job=\"api-java\", area=\"nonheap\"})",
+          "legendFormat": "JAVA — nonheap JVM",
+          "refId": "E"
         }
       ]
     },
