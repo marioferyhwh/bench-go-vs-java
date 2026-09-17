@@ -1,0 +1,19 @@
+# Normaliza saltos de línea: LF en el repo, nativo en el working tree
+* text=auto
+
+# Siempre LF: se ejecutan dentro de contenedores Linux y CRLF los rompe
+*.sh text eol=lf
+*.sql text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+mvnw text eol=lf
+
+# Siempre CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binarios: sin conversión ni diff
+*.jar binary
+*.png binary
+*.jpg binary

@@ -1,0 +1,23 @@
+# Go — binarios compilados
+go-service/bin/
+*.exe
+*.test
+
+# Java
+java-service/target/
+
+# Entorno local
+.env
+*.local
+
+# Resultados de pruebas de carga
+stress/results/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# SO
+.DS_Store
+Thumbs.db
