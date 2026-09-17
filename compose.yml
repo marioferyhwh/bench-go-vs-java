@@ -90,7 +90,8 @@ services:
     depends_on:
       - prometheus
 
-  # No arranca con `up`: se lanza a demanda con `docker compose run --rm k6`.
+  # No arranca con `up`: se lanza a demanda, normalmente con ./stress/stress.sh
+  # Estos defectos son los mismos que usa el script y el escenario de k6.
   k6:
     image: grafana/k6:latest
     container_name: k6
@@ -100,9 +101,9 @@ services:
     environment:
       - TARGETS=${TARGETS:-go,java}
       - USE_DATABASE=${USE_DATABASE:-false}
-      - VUS=${VUS:-10}
-      - MODE=${MODE:-duration}
+      - VUS=${VUS:-20}
+      - MODE=${MODE:-requests}
       - DURATION=${DURATION:-30s}
-      - REQUESTS=${REQUESTS:-50000}
+      - REQUESTS=${REQUESTS:-10000}
       - PUSHGATEWAY_URL=${PUSHGATEWAY_URL:-http://pushgateway:9091}
     command: ["run", "/scripts/data.js"]

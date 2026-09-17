@@ -8,9 +8,12 @@ const ENDPOINTS = {
   java: 'http://java-service:8081/data',
 };
 
-const DEFAULT_VUS = 10;
+// Estos defectos coinciden con los de compose.yml y stress.sh: se llegue por
+// donde se llegue, una corrida sin parámetros mide lo mismo.
+const DEFAULT_VUS = 20;
 const DEFAULT_DURATION = '30s';
-const DEFAULT_REQUESTS = 50000;
+const DEFAULT_REQUESTS = 10000;
+const DEFAULT_MODE = 'requests';
 const MODES = ['duration', 'requests'];
 
 // Aborta si TARGETS trae un nombre desconocido, en vez de estresar a medias.
@@ -57,7 +60,7 @@ function parseVus(raw) {
 
 function parseMode(raw) {
   if (raw === undefined || raw === '') {
-    return 'duration';
+    return DEFAULT_MODE;
   }
   if (!MODES.includes(raw)) {
     throw new Error(`MODE debe ser uno de: ${MODES.join(', ')}. Recibido: "${raw}"`);
