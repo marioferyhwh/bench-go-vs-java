@@ -3,14 +3,22 @@
   "uid": "comparativo",
   "timezone": "browser",
   "refresh": "5s",
-  "time": { "from": "now-15m", "to": "now" },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
   "panels": [
     {
       "id": 100,
       "type": "row",
       "title": "1 · Qué se midió",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "panels": []
     },
     {
@@ -18,13 +26,22 @@
       "title": "Corrida en curso",
       "description": "Vale 1 mientras k6 está generando carga. Empieza por aquí: ajusta el rango de tiempo a la franja donde vale 1, y los paneles de acumulado mostrarán solo esa corrida.",
       "type": "timeseries",
-      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 1 },
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "max": 1.2,
           "min": 0,
-          "custom": { "lineWidth": 2, "fillOpacity": 30, "lineInterpolation": "stepAfter" }
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 30,
+            "lineInterpolation": "stepAfter"
+          }
         },
         "overrides": []
       },
@@ -41,21 +58,48 @@
       "title": "Condiciones y resultados de la última corrida",
       "description": "Qué se midió y bajo qué parámetros, tal como lo reportó k6 al terminar. Sin estas condiciones los acumulados de CPU y memoria no significan nada: no es lo mismo gastar 27 segundos de CPU atendiendo 40.000 peticiones contra Postgres que 5.000 en simulación. Solo queda la corrida más reciente.",
       "type": "table",
-      "gridPos": { "h": 7, "w": 16, "x": 8, "y": 1 },
+      "gridPos": {
+        "h": 7,
+        "w": 16,
+        "x": 8,
+        "y": 1
+      },
       "fieldConfig": {
-        "defaults": { "custom": { "align": "auto" } },
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "p95 (ms)" },
-            "properties": [{ "id": "decimals", "value": 2 }]
+            "matcher": {
+              "id": "byName",
+              "options": "p95 (ms)"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
           },
           {
-            "matcher": { "id": "byName", "options": "peticiones/s" },
-            "properties": [{ "id": "decimals", "value": 0 }]
+            "matcher": {
+              "id": "byName",
+              "options": "peticiones/s"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
           }
         ]
       },
-      "options": { "showHeader": true },
+      "options": {
+        "showHeader": true
+      },
       "targets": [
         {
           "expr": "stress_run_requests_total",
@@ -85,7 +129,10 @@
       "transformations": [
         {
           "id": "joinByField",
-          "options": { "byField": "target", "mode": "outer" }
+          "options": {
+            "byField": "target",
+            "mode": "outer"
+          }
         },
         {
           "id": "organize",
@@ -150,7 +197,12 @@
       "type": "row",
       "title": "2 · Cuánto costó",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 8 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
       "panels": []
     },
     {
@@ -158,31 +210,74 @@
       "title": "Acumulado de la corrida",
       "description": "Totales consumidos dentro del rango de tiempo seleccionado. Ajusta el rango a una corrida (la franja donde 'Corrida en curso' vale 1) para leer solo esa corrida. La CPU se suma en segundos-CPU; la memoria es el promedio sostenido durante la corrida.",
       "type": "stat",
-      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 9 },
+      "gridPos": {
+        "h": 13,
+        "w": 12,
+        "x": 0,
+        "y": 9
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "decimals": 2,
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": [
           {
-            "matcher": { "id": "byRegexp", "options": ".*RAM.*" },
-            "properties": [{ "id": "unit", "value": "bytes" }]
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*RAM.*"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
           },
           {
-            "matcher": { "id": "byRegexp", "options": ".*CPU.*" },
-            "properties": [{ "id": "unit", "value": "s" }]
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*CPU.*"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
           },
           {
-            "matcher": { "id": "byRegexp", "options": ".*peticiones.*" },
-            "properties": [{ "id": "unit", "value": "short" }]
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*peticiones.*"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "short"
+              }
+            ]
           }
         ]
       },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "orientation": "horizontal",
         "textMode": "auto",
         "colorMode": "none",
@@ -233,17 +328,36 @@
       "title": "Coste por cada mil peticiones",
       "description": "Segundos de CPU gastados por cada mil peticiones atendidas dentro del rango. Es la cifra que compara eficiencia de verdad: no premia a quien atendió más, sino a quien gastó menos por el mismo trabajo. Úsala con MODE=requests, donde ambos atienden lo mismo.",
       "type": "stat",
-      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 16 },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 9
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "s",
           "decimals": 3,
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": []
       },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "orientation": "horizontal",
         "colorMode": "none",
         "graphMode": "none"
@@ -268,9 +382,20 @@
       "title": "Respuestas con error",
       "description": "Todo lo que no sea 200. Debe estar plano en cero: si sube durante una corrida, los números de esa corrida no valen y hay que repetirla.",
       "type": "timeseries",
-      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 16 },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
       "fieldConfig": {
-        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 5
+          }
+        },
         "overrides": []
       },
       "targets": [
@@ -286,7 +411,12 @@
       "type": "row",
       "title": "3 · Cómo se comportó durante la corrida",
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
       "panels": []
     },
     {
@@ -294,9 +424,20 @@
       "title": "Peticiones por segundo",
       "description": "Throughput instantáneo de cada tecnología. Muestra la forma de la carga en el tiempo; para comparar consumo usa el panel de coste por mil peticiones.",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
       "fieldConfig": {
-        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 5
+          }
+        },
         "overrides": []
       },
       "targets": [
@@ -308,13 +449,54 @@
       ]
     },
     {
+      "id": 12,
+      "title": "Peticiones acumuladas durante la corrida",
+      "description": "Total de peticiones atendidas acumulado dentro del rango. Arranca en cero y crece mientras la corrida esta activa; se mantiene unos 10 segundos mas tras el final para poder leer la cifra definitiva, y luego vuelve a cero para no arrastrar la corrida anterior. Leelo junto a Peticiones por segundo: uno da la forma de la carga, este el trabajo total hecho.",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (job) (increase(http_requests_total{status=\"200\"}[$__range])) * on() group_left() max(max_over_time(stress_run_active[10s]))",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
       "id": 2,
       "title": "Latencia p95",
       "description": "De cada 100 peticiones, 95 tardaron menos que esto. Se usa el percentil y no la media a propósito: la media esconde las pausas del recolector de basura.",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 39
+      },
       "fieldConfig": {
-        "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 5
+          }
+        },
         "overrides": []
       },
       "targets": [
@@ -330,9 +512,20 @@
       "title": "CPU del proceso",
       "description": "Fracción de un núcleo consumida por cada proceso. Ambas salen de process_cpu_seconds_total, la misma métrica en las dos tecnologías: 1.0 equivale a un núcleo saturado.",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 31 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
       "fieldConfig": {
-        "defaults": { "unit": "percentunit", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+        "defaults": {
+          "unit": "percentunit",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 5
+          }
+        },
         "overrides": []
       },
       "targets": [
@@ -349,20 +542,70 @@
       ]
     },
     {
+      "id": 13,
+      "title": "CPU acumulada durante la corrida",
+      "description": "Segundos de CPU gastados en total, acumulados dentro del rango. Arranca en cero y crece mientras la corrida esta activa; se mantiene unos 10 segundos mas tras el final para poder leer la cifra definitiva. Es el coste total de la corrida: la curva que quede mas abajo gasto menos por el mismo trabajo.",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 31
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(process_cpu_seconds_total{job=\"api-go\"}[$__range])) * on() group_left() max(max_over_time(stress_run_active[10s]))",
+          "legendFormat": "GO — CPU acumulada",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(increase(process_cpu_seconds_total{job=\"api-java\"}[$__range])) * on() group_left() max(max_over_time(stress_run_active[10s]))",
+          "legendFormat": "JAVA — CPU acumulada",
+          "refId": "B"
+        }
+      ]
+    },
+    {
       "id": 4,
       "title": "Memoria total del proceso (Go vs Java)",
       "description": "Memoria residente: todo lo que el sistema operativo reserva para el proceso. Es la única cifra comparable entre las dos tecnologías, porque mide lo mismo en ambas. Una línea por tecnología, sin desglose.",
       "type": "timeseries",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 31 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 39
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "bytes",
-          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        }
       },
       "targets": [
         {
@@ -382,20 +625,42 @@
       "type": "row",
       "title": "4 · Detalle para diagnóstico",
       "collapsed": true,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 39 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
       "panels": [
         {
           "id": 7,
           "title": "Desglose de memoria por tecnología",
           "description": "Qué hay dentro del total. En Go: heap del programa frente al residente. En Java: heap y nonheap de la JVM (el nonheap incluye metadatos de clases y el código que compila el JIT, y explica el grueso de la diferencia).",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 48
+          },
           "fieldConfig": {
-            "defaults": { "unit": "bytes", "custom": { "lineWidth": 1, "fillOpacity": 5 } },
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "lineWidth": 1,
+                "fillOpacity": 5
+              }
+            },
             "overrides": []
           },
           "options": {
-            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] }
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull"
+              ]
+            }
           },
           "targets": [
             {
@@ -430,9 +695,20 @@
           "title": "Peticiones por modo (simulation vs database)",
           "description": "Separa las peticiones que consultaron Postgres de las que solo esperaron los 50 ms simulados. Sirve para verificar que la simulación aplica su espera y para ver cuánto cuesta realmente la consulta.",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 48
+          },
           "fieldConfig": {
-            "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 5 } },
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 5
+              }
+            },
             "overrides": []
           },
           "targets": [
