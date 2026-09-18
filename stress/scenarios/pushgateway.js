@@ -3,6 +3,7 @@ import { sleep } from 'k6';
 import {
   ESPERA_CIERRE_SEGUNDOS,
   mode,
+  nuevoRunId,
   targets,
   useDatabase,
   valorDeCarga,
@@ -23,8 +24,14 @@ function escapar(valor) {
 
 // Van en todas las métricas empujadas para que un resultado nunca quede separado
 // de las condiciones que lo produjeron.
-function condiciones(extra) {
+//
+// run_id viaja aquí además de en la ruta del grupo: la ruta separa las corridas
+// para que no se pisen, la etiqueta permite agrupar por corrida en PromQL sin
+// depender de cómo el Pushgateway nombre el grupo. La tabla del dashboard
+// necesita esa etiqueta para dar una fila por corrida y tecnología.
+function condiciones(runId, extra) {
   const pares = [
+    `run_id="${escapar(runId)}"`,
     `mode="${escapar(mode)}"`,
     `load="${escapar(valorDeCarga())}"`,
     `use_database="${escapar(useDatabase)}"`,
@@ -36,10 +43,21 @@ function condiciones(extra) {
   return `{${pares.join(',')}}`;
 }
 
-const URL_GRUPO = `${__ENV.PUSHGATEWAY_URL || 'http://pushgateway:9091'}/metrics/job/k6_stress`;
+const BASE_PUSHGATEWAY = __ENV.PUSHGATEWAY_URL || 'http://pushgateway:9091';
 
-function empujar(lineas) {
-  const res = http.post(URL_GRUPO, lineas.join('\n') + '\n', {
+// Cada corrida tiene su propio grupo, así que un empuje nunca reemplaza a la
+// corrida anterior: el dashboard puede listar todas las que caigan dentro del
+// rango de tiempo que se esté viendo.
+//
+// El Pushgateway no expira grupos por su cuenta, y borrar el grupo padre
+// k6_stress no alcanza a los subgrupos: hay que borrar cada run_id por
+// separado, o tirar el stack con `docker compose down -v`.
+function urlDelGrupo(runId) {
+  return `${BASE_PUSHGATEWAY}/metrics/job/k6_stress/run_id/${runId}`;
+}
+
+function empujar(runId, lineas) {
+  const res = http.post(urlDelGrupo(runId), lineas.join('\n') + '\n', {
     headers: { 'Content-Type': 'text/plain' },
     timeout: '5s',
   });
@@ -50,19 +68,7 @@ function empujar(lineas) {
   }
 }
 
-// Las condiciones de la corrida viajan como etiquetas, así que dos corridas con
-// parámetros distintos son series distintas y un empuje no reemplaza al
-// anterior: la corrida vieja quedaría colgada y max(stress_run_start_seconds)
-// podría devolver su sello en vez del de la corrida en curso.
-function borrarGrupo() {
-  const res = http.del(URL_GRUPO, null, { timeout: '5s' });
-
-  if (res.status < 200 || res.status >= 300) {
-    console.warn(`No se pudo limpiar el Pushgateway: status ${res.status} ${res.body || ''}`);
-  }
-}
-
-function lineasDeResultados(data) {
+function lineasDeResultados(runId, data) {
   const lineas = [];
 
   for (const name of targets) {
@@ -70,16 +76,16 @@ function lineasDeResultados(data) {
     const etiqueta = `target="${escapar(name)}"`;
 
     lineas.push(
-      `stress_run_requests_total${condiciones(etiqueta)} ${r.total}`,
-      `stress_run_failures_total${condiciones(etiqueta)} ${r.failed}`,
-      `stress_run_rps${condiciones(etiqueta)} ${r.rps.toFixed(4)}`,
-      `stress_run_duration_seconds${condiciones(etiqueta)} ${r.seconds.toFixed(3)}`
+      `stress_run_requests_total${condiciones(runId, etiqueta)} ${r.total}`,
+      `stress_run_failures_total${condiciones(runId, etiqueta)} ${r.failed}`,
+      `stress_run_rps${condiciones(runId, etiqueta)} ${r.rps.toFixed(4)}`,
+      `stress_run_duration_seconds${condiciones(runId, etiqueta)} ${r.seconds.toFixed(3)}`
     );
 
     for (const [q, valor] of [['0.5', r.p50], ['0.95', r.p95], ['0.99', r.p99]]) {
       if (valor !== undefined) {
         lineas.push(
-          `stress_run_latency_ms${condiciones(`${etiqueta},quantile="${q}"`)} ${valor.toFixed(4)}`
+          `stress_run_latency_ms${condiciones(runId, `${etiqueta},quantile="${q}"`)} ${valor.toFixed(4)}`
         );
       }
     }
@@ -88,19 +94,28 @@ function lineasDeResultados(data) {
   return lineas;
 }
 
-// El dashboard ancla aquí sus acumulados: sin este sello no puede saber desde
-// cuándo contar, porque PromQL no admite rangos calculados.
+// Deja constancia de cuándo empezó la corrida y marca la franja de actividad a
+// la que se acotan los acumulados del dashboard.
+//
+// Genera el run_id y lo devuelve: es el único sitio donde nace. Quien cierra la
+// corrida recibe ese mismo valor en vez de calcular otro, porque un run_id
+// distinto al cerrar dejaría el grupo de apertura con stress_run_active colgado
+// en 1 para siempre, y el gateado de todos los acumulados apuntando a una
+// corrida que ya terminó.
+//
+// No borra nada antes de empujar: el grupo lleva el run_id de esta corrida, así
+// que no hay nada suyo que limpiar y lo único que se borraría es la corrida
+// anterior, que el dashboard necesita para listar varias en el mismo rango.
 export function abrirCorrida() {
-  borrarGrupo();
-
+  const runId = nuevoRunId();
   const inicio = Math.floor(Date.now() / 1000);
 
-  empujar([
-    `stress_run_active${condiciones()} 1`,
-    `stress_run_start_seconds${condiciones()} ${inicio}`,
+  empujar(runId, [
+    `stress_run_active${condiciones(runId)} 1`,
+    `stress_run_start_seconds${condiciones(runId)} ${inicio}`,
   ]);
 
-  return inicio;
+  return { runId, inicio };
 }
 
 // Cierra en dos tiempos. La carga ya terminó, pero Prometheus todavía no ha
@@ -114,20 +129,20 @@ export function abrirCorrida() {
 // pausa. Viajan también en el segundo empuje porque el Pushgateway reemplaza el
 // grupo entero en cada POST: uno final que solo llevara el apagado borraría las
 // cifras de la corrida.
-export function publicarResultados(data) {
-  const resultados = lineasDeResultados(data);
+export function publicarResultados(runId, data) {
+  const resultados = lineasDeResultados(runId, data);
 
-  empujar([`stress_run_active${condiciones()} 1`, ...resultados]);
+  empujar(runId, [`stress_run_active${condiciones(runId)} 1`, ...resultados]);
 
   return resultados;
 }
 
-export function apagarCorrida(resultados) {
+export function apagarCorrida(runId, resultados) {
   sleep(ESPERA_CIERRE_SEGUNDOS);
 
-  empujar([
-    `stress_run_active${condiciones()} 0`,
-    `stress_run_end_seconds${condiciones()} ${Math.floor(Date.now() / 1000)}`,
+  empujar(runId, [
+    `stress_run_active${condiciones(runId)} 0`,
+    `stress_run_end_seconds${condiciones(runId)} ${Math.floor(Date.now() / 1000)}`,
     ...resultados,
   ]);
 }

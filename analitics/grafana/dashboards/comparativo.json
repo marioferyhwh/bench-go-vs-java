@@ -7,6 +7,9 @@
     "from": "now-15m",
     "to": "now"
   },
+  "templating": {
+    "list": []
+  },
   "panels": [
     {
       "id": 100,
@@ -19,175 +22,233 @@
         "x": 0,
         "y": 0
       },
-      "panels": []
-    },
-    {
-      "id": 10,
-      "title": "Corrida en curso",
-      "description": "Vale 1 mientras k6 está generando carga. Empieza por aquí: ajusta el rango de tiempo a la franja donde vale 1, y los paneles de acumulado mostrarán solo esa corrida.",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 7,
-        "w": 8,
-        "x": 0,
-        "y": 1
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "max": 1.2,
-          "min": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 30,
-            "lineInterpolation": "stepAfter"
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
+      "panels": [
         {
-          "expr": "stress_run_active",
-          "legendFormat": "corrida",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 11,
-      "title": "Condiciones y resultados de la última corrida",
-      "description": "Qué se midió y bajo qué parámetros, tal como lo reportó k6 al terminar. Sin estas condiciones los acumulados de CPU y memoria no significan nada: no es lo mismo gastar 27 segundos de CPU atendiendo 40.000 peticiones contra Postgres que 5.000 en simulación. Solo queda la corrida más reciente.",
-      "type": "table",
-      "gridPos": {
-        "h": 7,
-        "w": 16,
-        "x": 8,
-        "y": 1
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto"
+          "id": 1,
+          "title": "Ejecución en curso",
+          "description": "Vale 1 mientras k6 está generando carga, y sigue en 1 durante la cola que k6 mantiene tras la última petición (ESPERA_CIERRE_SEGUNDOS en stress/scenarios/config.js) para que Prometheus alcance a registrar el final. Los paneles de acumulado se anclan solos a esta franja: no hay que tocar el rango de tiempo. Cada corrida deja su propia línea, identificada por run_id.",
+          "type": "timeseries",
+          "interval": "5s",
+          "gridPos": {
+            "h": 7,
+            "w": 8,
+            "x": 0,
+            "y": 1
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "max": 1.2,
+              "min": 0,
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 30,
+                "lineInterpolation": "stepAfter"
+              }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "stress_run_active",
+              "legendFormat": "{{run_id}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
           }
         },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "p95 (ms)"
+        {
+          "id": 2,
+          "title": "Condiciones y resultados de la corrida",
+          "description": "Qué se midió y bajo qué parámetros, tal como lo reportó k6 al terminar. Una fila por cada par de corrida y tecnología: dos corridas de dos tecnologías dentro del rango dan cuatro filas. Sin estas condiciones los acumulados de CPU y memoria no significan nada: no es lo mismo gastar 27 segundos de CPU atendiendo 40.000 peticiones contra Postgres que 5.000 en simulación. El modo importa al leer el resto del dashboard: con modo=requests ambas tecnologías atienden lo mismo y las cifras de coste comparan por petición; con modo=duration ambas corren el mismo tiempo y lo que compara es el gasto de tener el servicio en pie.",
+          "type": "table",
+          "gridPos": {
+            "h": 7,
+            "w": 16,
+            "x": 8,
+            "y": 1
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto"
+              }
             },
-            "properties": [
+            "overrides": [
               {
-                "id": "decimals",
-                "value": 2
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*\\(ms\\)"
+                },
+                "properties": [
+                  {
+                    "id": "decimals",
+                    "value": 2
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "peticiones/s"
+                },
+                "properties": [
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "duración (s)"
+                },
+                "properties": [
+                  {
+                    "id": "decimals",
+                    "value": 2
+                  }
+                ]
               }
             ]
           },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "peticiones/s"
-            },
-            "properties": [
+          "options": {
+            "showHeader": true,
+            "sortBy": [
               {
-                "id": "decimals",
-                "value": 0
+                "displayName": "corrida",
+                "desc": true
               }
             ]
-          }
-        ]
-      },
-      "options": {
-        "showHeader": true
-      },
-      "targets": [
-        {
-          "expr": "stress_run_requests_total",
-          "format": "table",
-          "instant": true,
-          "refId": "A"
-        },
-        {
-          "expr": "stress_run_rps",
-          "format": "table",
-          "instant": true,
-          "refId": "B"
-        },
-        {
-          "expr": "stress_run_latency_ms{quantile=\"0.95\"}",
-          "format": "table",
-          "instant": true,
-          "refId": "C"
-        },
-        {
-          "expr": "stress_run_failures_total",
-          "format": "table",
-          "instant": true,
-          "refId": "D"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "joinByField",
-          "options": {
-            "byField": "target",
-            "mode": "outer"
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "Time 1": true,
-              "Time 2": true,
-              "Time 3": true,
-              "Time 4": true,
-              "__name__": true,
-              "__name__ 1": true,
-              "__name__ 2": true,
-              "__name__ 3": true,
-              "__name__ 4": true,
-              "instance": true,
-              "instance 1": true,
-              "instance 2": true,
-              "instance 3": true,
-              "instance 4": true,
-              "job": true,
-              "job 1": true,
-              "job 2": true,
-              "job 3": true,
-              "job 4": true,
-              "exported_job": true,
-              "quantile": true,
-              "mode 2": true,
-              "mode 3": true,
-              "mode 4": true,
-              "load 2": true,
-              "load 3": true,
-              "load 4": true,
-              "use_database 2": true,
-              "use_database 3": true,
-              "use_database 4": true,
-              "vus 2": true,
-              "vus 3": true,
-              "vus 4": true
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "stress_run_requests_total",
+              "format": "table",
+              "instant": true,
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
             },
-            "renameByName": {
-              "target": "tecnología",
-              "mode": "modo",
-              "mode 1": "modo",
-              "load": "carga",
-              "load 1": "carga",
-              "use_database": "base de datos",
-              "use_database 1": "base de datos",
-              "vus": "VUs",
-              "vus 1": "VUs",
-              "Value #A": "peticiones",
-              "Value #B": "peticiones/s",
-              "Value #C": "p95 (ms)",
-              "Value #D": "fallos"
+            {
+              "refId": "B",
+              "expr": "stress_run_rps",
+              "format": "table",
+              "instant": true,
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "refId": "C",
+              "expr": "stress_run_duration_seconds",
+              "format": "table",
+              "instant": true,
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "refId": "D",
+              "expr": "stress_run_latency_ms{quantile=\"0.95\"}",
+              "format": "table",
+              "instant": true,
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "refId": "E",
+              "expr": "stress_run_latency_ms{quantile=\"0.99\"}",
+              "format": "table",
+              "instant": true,
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "refId": "F",
+              "expr": "stress_run_failures_total",
+              "format": "table",
+              "instant": true,
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
             }
+          ],
+          "transformations": [
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "exclude": {
+                  "names": [
+                    "Time",
+                    "__name__",
+                    "instance",
+                    "job",
+                    "exported_job",
+                    "quantile"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "merge",
+              "options": {}
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {},
+                "renameByName": {
+                  "run_id": "corrida",
+                  "target": "tecnología",
+                  "mode": "modo",
+                  "load": "carga",
+                  "use_database": "base de datos",
+                  "vus": "VUs",
+                  "Value #A": "peticiones",
+                  "Value #B": "peticiones/s",
+                  "Value #C": "duración (s)",
+                  "Value #D": "p95 (ms)",
+                  "Value #E": "p99 (ms)",
+                  "Value #F": "fallos"
+                },
+                "indexByName": {
+                  "run_id": 0,
+                  "target": 1,
+                  "mode": 2,
+                  "load": 3,
+                  "use_database": 4,
+                  "vus": 5,
+                  "Value #A": 6,
+                  "Value #B": 7,
+                  "Value #C": 8,
+                  "Value #D": 9,
+                  "Value #E": 10,
+                  "Value #F": 11
+                }
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
           }
         }
       ]
@@ -196,6 +257,7 @@
       "id": 101,
       "type": "row",
       "title": "2 · Cuánto costó",
+      "description": "Sección que muestra el costo durante la muestra",
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -203,206 +265,349 @@
         "x": 0,
         "y": 8
       },
-      "panels": []
-    },
-    {
-      "id": 8,
-      "title": "Acumulado de la corrida",
-      "description": "Totales consumidos dentro del rango de tiempo seleccionado. Ajusta el rango a una corrida (la franja donde 'Corrida en curso' vale 1) para leer solo esa corrida. La CPU se suma en segundos-CPU; la memoria es el promedio sostenido durante la corrida.",
-      "type": "stat",
-      "gridPos": {
-        "h": 13,
-        "w": 12,
-        "x": 0,
-        "y": 9
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 2,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
+      "panels": [
+        {
+          "id": 3,
+          "title": "Acumulado",
+          "description": "Totales de cada tecnología dentro del rango de tiempo que se está visualizando, contando solo los instantes en que había una corrida activa: el tiempo ocioso entre corridas no suma. Ajusta el rango para acotar qué corridas entran; si el rango cubre dos, las cifras las agregan juntas. La CPU son segundos-CPU, medidos como la diferencia entre el máximo y el mínimo del contador dentro de la franja activa, así un reinicio del proceso no dispara la cifra. La memoria va con dos cifras porque es un nivel y no un contador: el pico dice cuánta hizo falta reservar, el promedio cuánta se sostuvo durante la carga. Las peticiones son las atendidas con 200.",
+          "type": "stat",
+          "gridPos": {
+            "h": 13,
+            "w": 12,
+            "x": 0,
+            "y": 9
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 2,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
               }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": ".*RAM.*"
             },
-            "properties": [
+            "overrides": [
               {
-                "id": "unit",
-                "value": "bytes"
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*RAM.*"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*CPU.*"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "s"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 3
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*peticiones.*"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
               }
             ]
           },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": ".*CPU.*"
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
             },
-            "properties": [
+            "orientation": "horizontal",
+            "textMode": "auto",
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "max_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "legendFormat": "GO — CPU",
+              "instant": true
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "max_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "legendFormat": "JAVA — CPU",
+              "instant": true
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "avg_over_time((process_resident_memory_bytes{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "legendFormat": "GO — RAM promedio",
+              "instant": true
+            },
+            {
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "avg_over_time((process_resident_memory_bytes{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "legendFormat": "JAVA — RAM promedio",
+              "instant": true
+            },
+            {
+              "refId": "E",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "max_over_time((process_resident_memory_bytes{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "legendFormat": "GO — RAM pico",
+              "instant": true
+            },
+            {
+              "refId": "F",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "max_over_time((process_resident_memory_bytes{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "legendFormat": "JAVA — RAM pico",
+              "instant": true
+            },
+            {
+              "refId": "G",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(max_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) or on() vector(0)",
+              "legendFormat": "GO — peticiones",
+              "instant": true
+            },
+            {
+              "refId": "H",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(max_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) or on() vector(0)",
+              "legendFormat": "JAVA — peticiones",
+              "instant": true
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "id": 4,
+          "title": "Coste por cada mil peticiones",
+          "description": "Cuánto cuesta atender mil peticiones, proyectado desde lo que midió la corrida. Dos cifras por tecnología, que responden preguntas distintas: el TIEMPO dice cuánto tarda el usuario en ser atendido, la CPU cuánto cuesta atenderlo. Una tecnología puede ganar en una y perder en la otra. El tiempo sale de la duración que reportó k6 repartida entre sus peticiones, no de la franja de actividad: esa franja incluye los 30 segundos de espera del cierre, que no son trabajo. Úsalas con MODE=requests, donde ambas atienden lo mismo y la comparación es limpia; con MODE=duration cada una parte de un volumen distinto de peticiones y la cifra arrastra ese efecto. Debajo va el número de peticiones sobre el que se midió: el contador de CPU tiene una resolución de 10 ms, así que una corrida de pocos cientos de peticiones deja una señal del tamaño del ruido. Para comparar, tira decenas de miles. Si una tecnología no atendió ninguna petición su cifra queda vacía en vez de mostrar un número inventado.",
+          "type": "stat",
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 9
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "decimals": 3,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
               {
-                "id": "unit",
-                "value": "s"
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*medido sobre.*"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "short"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
               }
             ]
           },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": ".*peticiones.*"
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
             },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "short"
-              }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
+            "orientation": "horizontal",
+            "colorMode": "none",
+            "graphMode": "none"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "1000 * sum(stress_run_duration_seconds{target=\"go\"}) / (sum(stress_run_requests_total{target=\"go\"}) > 0)",
+              "legendFormat": "GO — tiempo por 1k",
+              "instant": true
+            },
+            {
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "1000 * sum(stress_run_duration_seconds{target=\"java\"}) / (sum(stress_run_requests_total{target=\"java\"}) > 0)",
+              "legendFormat": "JAVA — tiempo por 1k",
+              "instant": true
+            },
+            {
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "1000 * sum(max_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s])) / (sum(max_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) > 0)",
+              "legendFormat": "GO — CPU por 1k",
+              "instant": true
+            },
+            {
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "1000 * sum(max_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s])) / (sum(max_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) > 0)",
+              "legendFormat": "JAVA — CPU por 1k",
+              "instant": true
+            },
+            {
+              "refId": "E",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(max_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) or on() vector(0)",
+              "legendFormat": "GO — medido sobre",
+              "instant": true
+            },
+            {
+              "refId": "F",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(max_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) or on() vector(0)",
+              "legendFormat": "JAVA — medido sobre",
+              "instant": true
+            }
           ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "horizontal",
-        "textMode": "auto",
-        "colorMode": "none",
-        "graphMode": "none",
-        "justifyMode": "auto"
-      },
-      "targets": [
-        {
-          "expr": "sum(increase(process_cpu_seconds_total{job=\"api-go\"}[$__range]))",
-          "legendFormat": "GO — CPU total",
-          "instant": true,
-          "refId": "A"
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         },
         {
-          "expr": "sum(increase(process_cpu_seconds_total{job=\"api-java\"}[$__range]))",
-          "legendFormat": "JAVA — CPU total",
-          "instant": true,
-          "refId": "B"
-        },
-        {
-          "expr": "avg_over_time(process_resident_memory_bytes{job=\"api-go\"}[$__range])",
-          "legendFormat": "GO — RAM media",
-          "instant": true,
-          "refId": "C"
-        },
-        {
-          "expr": "avg_over_time(process_resident_memory_bytes{job=\"api-java\"}[$__range])",
-          "legendFormat": "JAVA — RAM media",
-          "instant": true,
-          "refId": "D"
-        },
-        {
-          "expr": "sum(increase(http_requests_total{job=\"api-go\", status=\"200\"}[$__range]))",
-          "legendFormat": "GO — peticiones",
-          "instant": true,
-          "refId": "E"
-        },
-        {
-          "expr": "sum(increase(http_requests_total{job=\"api-java\", status=\"200\"}[$__range]))",
-          "legendFormat": "JAVA — peticiones",
-          "instant": true,
-          "refId": "F"
-        }
-      ]
-    },
-    {
-      "id": 9,
-      "title": "Coste por cada mil peticiones",
-      "description": "Segundos de CPU gastados por cada mil peticiones atendidas dentro del rango. Es la cifra que compara eficiencia de verdad: no premia a quien atendió más, sino a quien gastó menos por el mismo trabajo. Úsala con MODE=requests, donde ambos atienden lo mismo.",
-      "type": "stat",
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 9
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "decimals": 3,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "text",
-                "value": null
+          "id": 5,
+          "title": "Respuestas con error",
+          "description": "Todo lo que no sea 200. Debe estar plano en cero: si sube durante una corrida, los números de esa corrida no valen y hay que repetirla.",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 12,
+            "y": 18
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 5
               }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "calcs": [
+                "sum"
+              ]
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum by (job, status) (rate(http_requests_total{status!=\"200\"}[1m]))",
+              "legendFormat": "{{job}} — {{status}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
           ],
-          "fields": "",
-          "values": false
-        },
-        "orientation": "horizontal",
-        "colorMode": "none",
-        "graphMode": "none"
-      },
-      "targets": [
-        {
-          "expr": "1000 * sum(increase(process_cpu_seconds_total{job=\"api-go\"}[$__range])) / clamp_min(sum(increase(http_requests_total{job=\"api-go\", status=\"200\"}[$__range])), 1)",
-          "legendFormat": "GO — CPU por 1k peticiones",
-          "instant": true,
-          "refId": "A"
-        },
-        {
-          "expr": "1000 * sum(increase(process_cpu_seconds_total{job=\"api-java\"}[$__range])) / clamp_min(sum(increase(http_requests_total{job=\"api-java\", status=\"200\"}[$__range])), 1)",
-          "legendFormat": "JAVA — CPU por 1k peticiones",
-          "instant": true,
-          "refId": "B"
-        }
-      ]
-    },
-    {
-      "id": 6,
-      "title": "Respuestas con error",
-      "description": "Todo lo que no sea 200. Debe estar plano en cero: si sube durante una corrida, los números de esa corrida no valen y hay que repetirla.",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 15
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 5
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
           }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "sum by (job, status) (rate(http_requests_total{status!=\"200\"}[1m]))",
-          "legendFormat": "{{job}} — {{status}}",
-          "refId": "A"
         }
       ]
     },
@@ -417,206 +622,250 @@
         "x": 0,
         "y": 22
       },
-      "panels": []
-    },
-    {
-      "id": 1,
-      "title": "Peticiones por segundo",
-      "description": "Throughput instantáneo de cada tecnología. Muestra la forma de la carga en el tiempo; para comparar consumo usa el panel de coste por mil peticiones.",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 23
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "reqps",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 5
+      "panels": [
+        {
+          "id": 6,
+          "title": "Peticiones por segundo",
+          "description": "Throughput instantáneo de cada tecnología. Muestra la forma de la carga en el tiempo; para comparar consumo usa el panel de coste por mil peticiones.",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 23
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 5
+              }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "sum by (job) (rate(http_requests_total{status=\"200\"}[1m]))",
+              "legendFormat": "{{job}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
           }
         },
-        "overrides": []
-      },
-      "targets": [
         {
-          "expr": "sum by (job) (rate(http_requests_total{status=\"200\"}[1m]))",
-          "legendFormat": "{{job}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 12,
-      "title": "Peticiones acumuladas durante la corrida",
-      "description": "Total de peticiones atendidas acumulado dentro del rango. Arranca en cero y crece mientras la corrida esta activa; se mantiene unos 10 segundos mas tras el final para poder leer la cifra definitiva, y luego vuelve a cero para no arrastrar la corrida anterior. Leelo junto a Peticiones por segundo: uno da la forma de la carga, este el trabajo total hecho.",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 23
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "short",
-          "decimals": 0,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
+          "id": 10,
+          "title": "Memoria total del proceso (Go vs Java)",
+          "description": "Memoria residente: todo lo que el sistema operativo reserva para el proceso. Es la única cifra comparable entre las dos tecnologías, porque mide lo mismo en ambas. Una línea por tecnología, sin desglose.",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 23
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 10
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(process_resident_memory_bytes{job=\"api-go\"})",
+              "legendFormat": "GO — total",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "expr": "sum(process_resident_memory_bytes{job=\"api-java\"})",
+              "legendFormat": "JAVA — total",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
           }
         },
-        "overrides": []
-      },
-      "targets": [
         {
-          "expr": "sum by (job) (increase(http_requests_total{status=\"200\"}[$__range])) * on() group_left() max(max_over_time(stress_run_active[10s]))",
-          "legendFormat": "{{job}}",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 2,
-      "title": "Latencia p95",
-      "description": "De cada 100 peticiones, 95 tardaron menos que esto. Se usa el percentil y no la media a propósito: la media esconde las pausas del recolector de basura.",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 39
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 5
+          "id": 8,
+          "title": "CPU del proceso",
+          "description": "Fracción de un núcleo consumida por cada proceso. Ambas salen de process_cpu_seconds_total, la misma métrica en las dos tecnologías: 1.0 equivale a un núcleo saturado.",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 31
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 5
+              }
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "expr": "rate(process_cpu_seconds_total{job=\"api-go\"}[1m])",
+              "legendFormat": "go",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "expr": "rate(process_cpu_seconds_total{job=\"api-java\"}[1m])",
+              "legendFormat": "java",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
           }
         },
-        "overrides": []
-      },
-      "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (job, le) (rate(http_request_duration_seconds_bucket[1m])))",
-          "legendFormat": "{{job}} p95",
-          "refId": "A"
-        }
-      ]
-    },
-    {
-      "id": 3,
-      "title": "CPU del proceso",
-      "description": "Fracción de un núcleo consumida por cada proceso. Ambas salen de process_cpu_seconds_total, la misma métrica en las dos tecnologías: 1.0 equivale a un núcleo saturado.",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 31
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 5
+          "id": 12,
+          "title": "Latencia p95 y p99",
+          "description": "De cada 100 peticiones, 95 o 99 tardaron menos que esto. Se usan percentiles y no la media a propósito: la media esconde las pausas del recolector de basura, que es justo donde la JVM se diferencia de Go. Miden predictibilidad bajo carga, no velocidad promedio. Van los dos juntos porque uno solo no distingue una latencia alta sostenida de una con picos aislados: el p95 describe la experiencia habitual bajo carga, el p99 la cola. Si van pegados el servicio es estable; si el p99 se dispara sobre el p95, hay picos que el promedio no vería.",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 31
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 0
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*p95"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "fill": "dash",
+                      "dash": [
+                        8,
+                        6
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-go.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "green"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-java.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "orange"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum by (job, le) (rate(http_request_duration_seconds_bucket[1m])))",
+              "legendFormat": "{{job}} p95",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket[1m])))",
+              "legendFormat": "{{job}} p99",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
           }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "rate(process_cpu_seconds_total{job=\"api-go\"}[1m])",
-          "legendFormat": "go",
-          "refId": "A"
-        },
-        {
-          "expr": "rate(process_cpu_seconds_total{job=\"api-java\"}[1m])",
-          "legendFormat": "java",
-          "refId": "B"
-        }
-      ]
-    },
-    {
-      "id": 13,
-      "title": "CPU acumulada durante la corrida",
-      "description": "Segundos de CPU gastados en total, acumulados dentro del rango. Arranca en cero y crece mientras la corrida esta activa; se mantiene unos 10 segundos mas tras el final para poder leer la cifra definitiva. Es el coste total de la corrida: la curva que quede mas abajo gasto menos por el mismo trabajo.",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 31
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "decimals": 2,
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "targets": [
-        {
-          "expr": "sum(increase(process_cpu_seconds_total{job=\"api-go\"}[$__range])) * on() group_left() max(max_over_time(stress_run_active[10s]))",
-          "legendFormat": "GO — CPU acumulada",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(increase(process_cpu_seconds_total{job=\"api-java\"}[$__range])) * on() group_left() max(max_over_time(stress_run_active[10s]))",
-          "legendFormat": "JAVA — CPU acumulada",
-          "refId": "B"
-        }
-      ]
-    },
-    {
-      "id": 4,
-      "title": "Memoria total del proceso (Go vs Java)",
-      "description": "Memoria residente: todo lo que el sistema operativo reserva para el proceso. Es la única cifra comparable entre las dos tecnologías, porque mide lo mismo en ambas. Una línea por tecnología, sin desglose.",
-      "type": "timeseries",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 39
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "bytes",
-          "custom": {
-            "lineWidth": 2,
-            "fillOpacity": 10
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "calcs": [
-            "lastNotNull",
-            "max"
-          ]
-        }
-      },
-      "targets": [
-        {
-          "expr": "sum(process_resident_memory_bytes{job=\"api-go\"})",
-          "legendFormat": "GO — total",
-          "refId": "A"
-        },
-        {
-          "expr": "sum(process_resident_memory_bytes{job=\"api-java\"})",
-          "legendFormat": "JAVA — total",
-          "refId": "B"
         }
       ]
     },
@@ -629,19 +878,19 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 39
       },
       "panels": [
         {
-          "id": 7,
+          "id": 13,
           "title": "Desglose de memoria por tecnología",
-          "description": "Qué hay dentro del total. En Go: heap del programa frente al residente. En Java: heap y nonheap de la JVM (el nonheap incluye metadatos de clases y el código que compila el JIT, y explica el grueso de la diferencia).",
+          "description": "Qué hay dentro del total, sin agrupar: cada traza por separado para ver fluctuaciones exactas, picos del recolector de basura y fugas. En Go: heap del programa frente al residente. En Java: heap y nonheap de la JVM (el nonheap incluye metadatos de clases y el código que compila el JIT, y explica el grueso de la diferencia).",
           "type": "timeseries",
           "gridPos": {
-            "h": 8,
-            "w": 12,
+            "h": 10,
+            "w": 24,
             "x": 0,
-            "y": 48
+            "y": 40
           },
           "fieldConfig": {
             "defaults": {
@@ -658,7 +907,8 @@
               "displayMode": "table",
               "placement": "bottom",
               "calcs": [
-                "lastNotNull"
+                "lastNotNull",
+                "max"
               ]
             }
           },
@@ -666,62 +916,55 @@
             {
               "expr": "sum(process_resident_memory_bytes{job=\"api-go\"})",
               "legendFormat": "GO — residente total",
-              "refId": "A"
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
             },
             {
               "expr": "sum(go_memstats_heap_inuse_bytes{job=\"api-go\"})",
               "legendFormat": "GO — heap en uso",
-              "refId": "B"
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
             },
             {
               "expr": "sum(process_resident_memory_bytes{job=\"api-java\"})",
               "legendFormat": "JAVA — residente total",
-              "refId": "C"
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
             },
             {
               "expr": "sum(jvm_memory_used_bytes{job=\"api-java\", area=\"heap\"})",
               "legendFormat": "JAVA — heap JVM",
-              "refId": "D"
+              "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
             },
             {
               "expr": "sum(jvm_memory_used_bytes{job=\"api-java\", area=\"nonheap\"})",
               "legendFormat": "JAVA — nonheap JVM",
-              "refId": "E"
-            }
-          ]
-        },
-        {
-          "id": 5,
-          "title": "Peticiones por modo (simulation vs database)",
-          "description": "Separa las peticiones que consultaron Postgres de las que solo esperaron los 50 ms simulados. Sirve para verificar que la simulación aplica su espera y para ver cuánto cuesta realmente la consulta.",
-          "type": "timeseries",
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 48
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "reqps",
-              "custom": {
-                "lineWidth": 2,
-                "fillOpacity": 5
+              "refId": "E",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
               }
-            },
-            "overrides": []
-          },
-          "targets": [
-            {
-              "expr": "sum by (job, mode) (rate(http_requests_total[1m]))",
-              "legendFormat": "{{job}} — {{mode}}",
-              "refId": "A"
             }
-          ]
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
         }
       ]
     }
-  ],
-  "schemaVersion": 39,
-  "version": 1
+  ]
 }

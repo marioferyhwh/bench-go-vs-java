@@ -28,10 +28,12 @@ Sin opciones: 10.000 peticiones por tecnología, sin base de datos.
 | `--warm` | No reinicia nada | defecto |
 | `--help` | Muestra la ayuda | — |
 
-`--requests` y `--duration` son excluyentes, y cada una elige qué se mide:
+`--requests` y `--duration` son excluyentes, y cada una responde una pregunta distinta:
 
-- **`--requests`** fija el trabajo: ambas tecnologías atienden lo mismo y se compara cuánto tardan y cuánto gastan. Es el modo para medir **eficiencia**.
-- **`--duration`** fija el tiempo: cada una hace las peticiones que puede. Es el modo para medir **capacidad**, pero su consumo de CPU no es comparable porque no hicieron el mismo trabajo.
+- **`--requests`** fija el trabajo: ambas tecnologías atienden lo mismo, así que comparar cuánto tardaron y cuánto gastaron aísla el **coste por petición**.
+- **`--duration`** fija el tiempo: ambas corren los mismos segundos bajo la misma presión, así que su gasto de CPU y de memoria compara el **coste de tenerlas en pie** durante esa ventana. Es también el modo que dice cuántas peticiones aguanta cada una.
+
+Los dos comparan consumo, pero no el mismo consumo. Lo que `--duration` no permite es dividir ese gasto entre peticiones: si una atendió 90.000 y la otra 55.000, la que más gastó pudo hacerlo porque trabajó más, no porque sea más cara. Para eso está `--requests`.
 
 ## VUs
 
@@ -89,5 +91,24 @@ Los defectos están escritos en tres sitios que deben coincidir: `stress.sh`, `c
 ## Resultados
 
 Al terminar, k6 imprime un resumen por tecnología y empuja las condiciones y los resultados al Pushgateway, de donde Prometheus los lee. Se ven en el dashboard "Comparativo Go vs Java" de Grafana (http://localhost:3000, admin/admin), en la sección "Qué se midió".
+
+Cada corrida se guarda con su propio identificador, así que una no borra a la anterior: la tabla del dashboard muestra todas las que caigan dentro del rango de tiempo que se esté viendo, con una fila por corrida y tecnología.
+
+El Pushgateway **no las expira por su cuenta**. Se acumulan hasta que se vacían a mano:
+
+```sh
+# Lo más simple: se lleva por delante todo el estado del stack
+docker compose down -v
+```
+
+Para borrar corridas sueltas hay que ir grupo por grupo, con el identificador de cada una. Un `DELETE` a `/metrics/job/k6_stress` **no sirve**: cada corrida vive en un subgrupo propio y el borrado del grupo padre no los alcanza.
+
+```sh
+# Ver qué corridas hay guardadas
+curl -s http://localhost:9091/metrics | grep 'stress_run_active{'
+
+# Borrar una por su identificador
+curl -X DELETE http://localhost:9091/metrics/job/k6_stress/run_id/1789740547
+```
 
 El contrato completo está en `docs/specs/stress-tool/spec.md`.

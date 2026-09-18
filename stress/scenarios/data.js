@@ -52,9 +52,13 @@ export function setup() {
       `${vusPerTarget} VUs por objetivo (${vusTotales} en total) | ${descripcionDeCarga()}`
   );
 
-  const inicio = abrirCorrida();
+  const { runId, inicio } = abrirCorrida();
 
-  return { inicio: new Date(inicio * 1000).toISOString() };
+  // El runId viaja por aquí y no como constante de módulo porque handleSummary
+  // corre en otro contexto de k6: los módulos se evalúan una vez por contexto,
+  // así que un identificador calculado allí sería distinto del que abrió la
+  // corrida. Lo que devuelve setup() sí llega intacto.
+  return { runId, inicio: new Date(inicio * 1000).toISOString() };
 }
 
 export function hitTarget() {
@@ -86,14 +90,19 @@ export function handleSummary(data) {
     console.log(linea);
   }
 
-  const resultados = publicarResultados(data);
+  // k6 entrega aquí lo que devolvió setup(), y de ahí sale el runId con el que
+  // se abrió la corrida. Sin él los empujes irían a un grupo distinto del de
+  // apertura, que quedaría con stress_run_active en 1 para siempre.
+  const { runId } = data.setup_data;
+
+  const resultados = publicarResultados(runId, data);
 
   console.log(
     `Resultados publicados. Esperando ${ESPERA_CIERRE_SEGUNDOS} s a que Prometheus ` +
       'raspe el tramo final antes de cerrar la franja de actividad.'
   );
 
-  apagarCorrida(resultados);
+  apagarCorrida(runId, resultados);
 
   return {};
 }

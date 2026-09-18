@@ -102,6 +102,25 @@ export const duration = parseDuration(__ENV.DURATION);
 export const mode = parseMode(__ENV.MODE);
 export const requests = parseRequests(__ENV.REQUESTS);
 
+// Identifica la corrida frente a las anteriores: el Pushgateway le da un grupo
+// propio, así que una corrida ya no borra a la que la precedió y el dashboard
+// puede listar varias dentro del mismo rango de tiempo.
+//
+// Se genera una sola vez, en setup(), y viaja de ahí al resto de la corrida
+// como dato. No puede ser una constante de módulo: k6 evalúa los módulos una
+// vez por contexto de ejecución, y setup() y handleSummary() son contextos
+// distintos, así que cada uno calcularía su propio instante. La corrida
+// quedaría partida en dos grupos: uno que abre y nunca cierra, dejando
+// stress_run_active colgado en 1 para siempre, y otro que cierra sin haber
+// abierto.
+//
+// Es el mismo número que viaja como stress_run_start_seconds: el instante de
+// arranque en segundos unix. Entero, así que es seguro dentro de una ruta URL
+// sin escapar.
+export function nuevoRunId() {
+  return String(Math.floor(Date.now() / 1000));
+}
+
 // VUS es por objetivo, no un total que se reparta: con dos objetivos y VUS=20
 // cada uno recibe 20 y corren a la vez, compitiendo por la misma CPU. Repartir
 // cambiaría la carga que recibe cada servicio según cuántos objetivos haya, y
