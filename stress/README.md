@@ -41,11 +41,19 @@ Los dos comparan consumo, pero no el mismo consumo. Lo que `--duration` no permi
 
 Se hace así para que cada servicio reciba siempre la misma carga sin importar cuántos objetivos haya en la corrida, y para que dos corridas con el mismo `--vus` sean comparables entre sí.
 
-## Cierre de la corrida
+## Apertura y cierre de la corrida
 
-Al terminar la carga, k6 imprime el resumen y publica los resultados de inmediato. Después espera 30 segundos antes de marcar la corrida como apagada, para que Prometheus alcance a raspar el último tramo de tráfico y CPU y el acumulado del dashboard no se quede corto.
+Cada corrida lleva una espera en cada extremo, y las dos existen por la misma razón: Prometheus raspa cada segundo y no lo hace justo en el instante en que la corrida empieza o termina. Sin esos márgenes, el tráfico de los extremos cae fuera de la franja que el dashboard usa para acumular.
 
-Esa espera no retrasa los números: ya están en pantalla y en el Pushgateway cuando empieza. El valor vive en un solo sitio, `ESPERA_CIERRE_SEGUNDOS` en `scenarios/config.js`.
+**Al abrir**, k6 marca la corrida como activa y espera 3 segundos antes de lanzar la primera petición. Ese margen le da a Prometheus tiempo de raspar los contadores con la franja ya abierta y sin tráfico todavía, que es el punto de partida de la resta.
+
+Sin esta espera el primer raspado llegaba con peticiones ya servidas, y esas se perdían: una corrida de 5000 peticiones que duraba 13 segundos aparecía en el acumulado como 3400, cuando el raspado iba todavía cada 5 s.
+
+**Al cerrar**, k6 imprime el resumen y publica los resultados de inmediato, y después espera 3 segundos antes de marcar la corrida como apagada, para que el último tramo de tráfico y CPU entre en algún raspado.
+
+Ninguna de las dos esperas retrasa los números: los resultados están en pantalla y en el Pushgateway en cuanto termina la carga. Los dos valores viven en un solo sitio, `ESPERA_APERTURA_SEGUNDOS` y `ESPERA_CIERRE_SEGUNDOS` en `scenarios/config.js`, y son 3 y 3: con el raspado cada segundo, eso da tres raspados de margen a cada lado.
+
+Para leer el acumulado de **una sola** corrida hay que estrechar el rango de tiempo del dashboard hasta que solo la cubra a ella. Si abarca dos, las cifras las suman.
 
 ## Ejemplos
 
@@ -90,7 +98,23 @@ Los defectos están escritos en tres sitios que deben coincidir: `stress.sh`, `c
 
 ## Resultados
 
-Al terminar, k6 imprime un resumen por tecnología y empuja las condiciones y los resultados al Pushgateway, de donde Prometheus los lee. Se ven en el dashboard "Comparativo Go vs Java" de Grafana (http://localhost:3000, admin/admin), en la sección "Qué se midió".
+Al terminar, k6 imprime un resumen por tecnología —tiempo activo, peticiones por segundo, latencias p50/p95/p99 y fallos— y cierra con el total de la corrida: cuánto duró, cuántas peticiones generó y cuántas fallaron.
+
+```
+================================================================
+  TOTAL DE LA CORRIDA
+    duración   : 11.20 s
+    GO         : 2000 peticiones, 0 fallos
+    JAVA       : 2000 peticiones, 0 fallos
+    TOTAL      : 4000 peticiones, 0 fallos
+================================================================
+```
+
+Las peticiones van desglosadas por tecnología porque el total suelto no dice cuántas atendió cada una, que es lo que se compara. En modo `requests` las dos salen iguales por diseño; en modo `duration` cada una hace las que puede, y ahí la diferencia es la medición.
+
+Esa duración es de reloj y no coincide con la suma de los tiempos activos de cada tecnología: corren a la vez, y además incluye la espera de apertura.
+
+Después empuja las condiciones y los resultados al Pushgateway, de donde Prometheus los lee. Se ven en el dashboard "Comparativo Go vs Java" de Grafana (http://localhost:3000, admin/admin1), en la sección "Qué se midió".
 
 Cada corrida se guarda con su propio identificador, así que una no borra a la anterior: la tabla del dashboard muestra todas las que caigan dentro del rango de tiempo que se esté viendo, con una fila por corrida y tecnología.
 

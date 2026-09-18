@@ -1,6 +1,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import {
+  ESPERA_APERTURA_SEGUNDOS,
   ESPERA_CIERRE_SEGUNDOS,
   descripcionDeCarga,
   duration,
@@ -50,6 +51,12 @@ export function setup() {
   console.log(
     `Modo ${mode} | objetivos: ${targets.join(', ')} | useDatabase=${useDatabase} | ` +
       `${vusPerTarget} VUs por objetivo (${vusTotales} en total) | ${descripcionDeCarga()}`
+  );
+
+  console.log(
+    `Marcando la corrida como activa. Esperando ${ESPERA_APERTURA_SEGUNDOS} s a que ` +
+      'Prometheus raspe los contadores antes de empezar, para que el primer tramo ' +
+      'de tráfico entre en el acumulado.'
   );
 
   const { runId, inicio } = abrirCorrida();

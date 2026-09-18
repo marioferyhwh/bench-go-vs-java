@@ -11,13 +11,27 @@ const DEFAULT_REQUESTS = 10000;
 const DEFAULT_MODE = 'requests';
 const MODES = ['duration', 'requests'];
 
-// Único sitio donde vive el número. Margen de sobra sobre el scrape_interval de
-// analitics/prometheus.yml para que el último tramo de tráfico y CPU entre en
-// algún raspado antes de que la franja de actividad se cierre.
+// La franja de actividad se abre y se cierra con margen sobre el
+// scrape_interval de analitics/prometheus.yml, que es de 1 s. Los dos márgenes
+// existen por la misma razón: Prometheus no raspa en el instante en que la
+// franja cambia de estado, así que sin ellos el tráfico de los extremos queda
+// fuera de los acumulados.
 //
-// No bloquea al usuario: los resultados se publican y se imprimen en cuanto
-// termina la carga, y esta espera solo retrasa el empuje del apagado.
-export const ESPERA_CIERRE_SEGUNDOS = 30;
+// Al abrir: k6 marca la corrida activa y espera antes de lanzar tráfico, para
+// que Prometheus alcance a raspar los contadores ya dentro de la franja. Sin
+// esta espera el primer raspado llega con carga ya servida, y ese tramo se
+// pierde: en una corrida de 13 s medida con esta espera en cero y el raspado
+// cada 5 s, el acumulado daba 3400 de 5000 peticiones.
+//
+// Al cerrar: la carga ya terminó pero el último tramo aún no se ha raspado.
+//
+// Tres segundos dan tres raspados de margen a cada lado, de sobra para que uno
+// caiga dentro sin depender de dónde esté el reloj de Prometheus. Eran 6 y 20
+// cuando el raspado iba cada 5 s; al bajarlo a 1 s el margen que hacía falta
+// se encogió con él. Ninguna de las dos bloquea las cifras: los resultados se
+// publican y se imprimen en cuanto termina la carga.
+export const ESPERA_APERTURA_SEGUNDOS = 3;
+export const ESPERA_CIERRE_SEGUNDOS = 3;
 
 function parseTargets(raw) {
   const names = (raw || 'go,java')

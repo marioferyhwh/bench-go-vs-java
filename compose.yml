@@ -83,8 +83,8 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_SECURITY_DISABLE_INITIAL_ADMIN_PASSWORD_CHANGE="true"
+      - GF_SECURITY_ADMIN_PASSWORD=admin1
+      - GF_DASHBOARDS_MIN_REFRESH_INTERVAL=1s
     volumes:
       - ./analitics/grafana/provisioning:/etc/grafana/provisioning
       - ./analitics/grafana/dashboards:/var/lib/grafana/dashboards

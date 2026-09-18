@@ -1,6 +1,7 @@
 import http from 'k6/http';
 import { sleep } from 'k6';
 import {
+  ESPERA_APERTURA_SEGUNDOS,
   ESPERA_CIERRE_SEGUNDOS,
   mode,
   nuevoRunId,
@@ -114,6 +115,13 @@ export function abrirCorrida() {
     `stress_run_active${condiciones(runId)} 1`,
     `stress_run_start_seconds${condiciones(runId)} ${inicio}`,
   ]);
+
+  // Espera a que Prometheus raspe los contadores con la franja ya abierta y sin
+  // tráfico todavía. Ese raspado es el punto de partida de los acumulados: sin
+  // él, el primero que entra en la franja llega con peticiones ya servidas y
+  // esas quedan fuera de la resta. En una corrida de 13 s el acumulado daba
+  // 3400 de 5000 peticiones.
+  sleep(ESPERA_APERTURA_SEGUNDOS);
 
   return { runId, inicio };
 }

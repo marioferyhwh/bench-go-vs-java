@@ -23,6 +23,33 @@ export function registrarPeticion(name, res, ok) {
   }
 }
 
+// Totales de la corrida entera, para cerrar el informe con lo que costó en
+// conjunto: cuánto duró de reloj y cuántas peticiones se generaron.
+//
+// La duración es la de reloj y no la suma de los tiempos activos de cada
+// objetivo: los objetivos corren a la vez, así que sumarlos daría más tiempo
+// del que realmente pasó. k6 la publica en data.state.testRunDurationMs, e
+// incluye lo que tarda setup() —la espera de apertura entre otras cosas—, así
+// que sale algo por encima del tiempo que duró la carga.
+export function totalesDe(data) {
+  let peticiones = 0;
+  let fallos = 0;
+
+  for (const name of targets) {
+    peticiones += data.metrics[`peticiones_${name}`]?.values.count ?? 0;
+    fallos += data.metrics[`fallos_${name}`]?.values.count ?? 0;
+  }
+
+  const seconds = (data.state?.testRunDurationMs ?? 0) / 1000;
+
+  return {
+    peticiones,
+    fallos,
+    seconds,
+    rps: seconds > 0 ? peticiones / seconds : 0,
+  };
+}
+
 // El tiempo de cada objetivo se calcula con su propia latencia acumulada
 // repartida entre sus VUs, no con la duración total de la corrida: en modo
 // requests un objetivo puede terminar mucho antes que el otro y quedarse

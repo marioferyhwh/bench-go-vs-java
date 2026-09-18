@@ -2,7 +2,7 @@
   "title": "Comparativo Go vs Java",
   "uid": "comparativo",
   "timezone": "browser",
-  "refresh": "5s",
+  "refresh": "1s",
   "time": {
     "from": "now-15m",
     "to": "now"
@@ -26,9 +26,8 @@
         {
           "id": 1,
           "title": "Ejecución en curso",
-          "description": "Vale 1 mientras k6 está generando carga, y sigue en 1 durante la cola que k6 mantiene tras la última petición (ESPERA_CIERRE_SEGUNDOS en stress/scenarios/config.js) para que Prometheus alcance a registrar el final. Los paneles de acumulado se anclan solos a esta franja: no hay que tocar el rango de tiempo. Cada corrida deja su propia línea, identificada por run_id.",
+          "description": "Vale 1 mientras k6 está generando carga, con margen a los dos lados: arranca 6 segundos antes de la primera petición, para que Prometheus alcance a raspar los contadores antes de que empiece el tráfico, y sigue en 1 durante los 20 segundos posteriores a la última, para que el tramo final entre en algún raspado. Los dos valores viven en stress/scenarios/config.js. Los paneles de acumulado se anclan solos a esta franja. Solo se listan las corridas que estuvieron activas dentro del rango que se está viendo: las anteriores siguen guardadas en el Pushgateway, pero no ensucian la leyenda. Cada línea lleva el run_id de su corrida, que es el mismo que aparece en la tabla de al lado.",
           "type": "timeseries",
-          "interval": "5s",
           "gridPos": {
             "h": 7,
             "w": 8,
@@ -50,7 +49,7 @@
           },
           "targets": [
             {
-              "expr": "stress_run_active",
+              "expr": "stress_run_active and on(run_id) (max_over_time(stress_run_active[$__range]) > 0)",
               "legendFormat": "{{run_id}}",
               "refId": "A",
               "datasource": {
@@ -67,7 +66,7 @@
         {
           "id": 2,
           "title": "Condiciones y resultados de la corrida",
-          "description": "Qué se midió y bajo qué parámetros, tal como lo reportó k6 al terminar. Una fila por cada par de corrida y tecnología: dos corridas de dos tecnologías dentro del rango dan cuatro filas. Sin estas condiciones los acumulados de CPU y memoria no significan nada: no es lo mismo gastar 27 segundos de CPU atendiendo 40.000 peticiones contra Postgres que 5.000 en simulación. El modo importa al leer el resto del dashboard: con modo=requests ambas tecnologías atienden lo mismo y las cifras de coste comparan por petición; con modo=duration ambas corren el mismo tiempo y lo que compara es el gasto de tener el servicio en pie.",
+          "description": "Qué se midió y bajo qué parámetros, tal como lo reportó k6 al terminar. Una fila por cada par de corrida y tecnología: dos corridas de dos tecnologías dan cuatro filas. Solo aparecen las corridas que estuvieron activas dentro del rango que se está viendo, las mismas que dibuja el panel de al lado: las anteriores siguen guardadas en el Pushgateway y vuelven a salir si se amplía el rango. Sin estas condiciones los acumulados de CPU y memoria no significan nada: no es lo mismo gastar 27 segundos de CPU atendiendo 40.000 peticiones contra Postgres que 5.000 en simulación. El modo importa al leer el resto del dashboard: con modo=requests ambas tecnologías atienden lo mismo y las cifras de coste comparan por petición; con modo=duration ambas corren el mismo tiempo y lo que compara es el gasto de tener el servicio en pie.",
           "type": "table",
           "gridPos": {
             "h": 7,
@@ -79,18 +78,23 @@
             "defaults": {
               "custom": {
                 "align": "auto"
-              }
+              },
+              "unit": "none"
             },
             "overrides": [
               {
                 "matcher": {
                   "id": "byRegexp",
-                  "options": ".*\\(ms\\)"
+                  "options": "^(peticiones|fallos)$"
                 },
                 "properties": [
                   {
+                    "id": "unit",
+                    "value": "none"
+                  },
+                  {
                     "id": "decimals",
-                    "value": 2
+                    "value": 0
                   }
                 ]
               },
@@ -101,8 +105,28 @@
                 },
                 "properties": [
                   {
+                    "id": "unit",
+                    "value": "none"
+                  },
+                  {
                     "id": "decimals",
                     "value": 0
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*\\(ms\\)$"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "none"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 2
                   }
                 ]
               },
@@ -112,6 +136,10 @@
                   "options": "duración (s)"
                 },
                 "properties": [
+                  {
+                    "id": "unit",
+                    "value": "none"
+                  },
                   {
                     "id": "decimals",
                     "value": 2
@@ -132,7 +160,7 @@
           "targets": [
             {
               "refId": "A",
-              "expr": "stress_run_requests_total",
+              "expr": "stress_run_requests_total and on(run_id) (max_over_time(stress_run_active[$__range]) > 0)",
               "format": "table",
               "instant": true,
               "datasource": {
@@ -142,7 +170,7 @@
             },
             {
               "refId": "B",
-              "expr": "stress_run_rps",
+              "expr": "stress_run_rps and on(run_id) (max_over_time(stress_run_active[$__range]) > 0)",
               "format": "table",
               "instant": true,
               "datasource": {
@@ -152,7 +180,7 @@
             },
             {
               "refId": "C",
-              "expr": "stress_run_duration_seconds",
+              "expr": "stress_run_duration_seconds and on(run_id) (max_over_time(stress_run_active[$__range]) > 0)",
               "format": "table",
               "instant": true,
               "datasource": {
@@ -162,7 +190,7 @@
             },
             {
               "refId": "D",
-              "expr": "stress_run_latency_ms{quantile=\"0.95\"}",
+              "expr": "stress_run_latency_ms{quantile=\"0.95\"} and on(run_id) (max_over_time(stress_run_active[$__range]) > 0)",
               "format": "table",
               "instant": true,
               "datasource": {
@@ -172,7 +200,7 @@
             },
             {
               "refId": "E",
-              "expr": "stress_run_latency_ms{quantile=\"0.99\"}",
+              "expr": "stress_run_latency_ms{quantile=\"0.99\"} and on(run_id) (max_over_time(stress_run_active[$__range]) > 0)",
               "format": "table",
               "instant": true,
               "datasource": {
@@ -182,7 +210,7 @@
             },
             {
               "refId": "F",
-              "expr": "stress_run_failures_total",
+              "expr": "stress_run_failures_total and on(run_id) (max_over_time(stress_run_active[$__range]) > 0)",
               "format": "table",
               "instant": true,
               "datasource": {
@@ -269,7 +297,7 @@
         {
           "id": 3,
           "title": "Acumulado",
-          "description": "Totales de cada tecnología dentro del rango de tiempo que se está visualizando, contando solo los instantes en que había una corrida activa: el tiempo ocioso entre corridas no suma. Ajusta el rango para acotar qué corridas entran; si el rango cubre dos, las cifras las agregan juntas. La CPU son segundos-CPU, medidos como la diferencia entre el máximo y el mínimo del contador dentro de la franja activa, así un reinicio del proceso no dispara la cifra. La memoria va con dos cifras porque es un nivel y no un contador: el pico dice cuánta hizo falta reservar, el promedio cuánta se sostuvo durante la carga. Las peticiones son las atendidas con 200.",
+          "description": "Totales de cada tecnología dentro del rango de tiempo que se está visualizando, contando solo los instantes en que había una corrida activa: el tiempo ocioso entre corridas no suma. Si el rango no cubre ninguna corrida, todas las cifras salen en cero, que es lo medido: sin corrida no se midió nada, y mostrar el consumo actual del proceso sería contar la CPU que gasta estando parado. Ajusta el rango para acotar qué corridas entran; si cubre dos, las cifras las agregan juntas, y si mezclas modo=requests con modo=duration las peticiones de cada tecnología dejan de ser comparables. La CPU son segundos-CPU, medidos como la diferencia entre el máximo y el mínimo del contador dentro de la franja activa, así un reinicio del proceso no dispara la cifra. La memoria va con dos cifras porque es un nivel y no un contador: el pico dice cuánta hizo falta reservar, el promedio cuánta se sostuvo durante la carga. Las peticiones son las atendidas con 200.",
           "type": "stat",
           "gridPos": {
             "h": 13,
@@ -279,7 +307,7 @@
           },
           "fieldConfig": {
             "defaults": {
-              "unit": "short",
+              "unit": "none",
               "decimals": 2,
               "mappings": [],
               "thresholds": {
@@ -329,7 +357,7 @@
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "short"
+                    "value": "none"
                   },
                   {
                     "id": "decimals",
@@ -360,7 +388,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "max_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "expr": "(max_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:1s])) or on() vector(0)",
               "legendFormat": "GO — CPU",
               "instant": true
             },
@@ -370,7 +398,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "max_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "expr": "(max_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:1s])) or on() vector(0)",
               "legendFormat": "JAVA — CPU",
               "instant": true
             },
@@ -380,7 +408,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "avg_over_time((process_resident_memory_bytes{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "expr": "(avg_over_time((process_resident_memory_bytes{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:1s])) or on() vector(0)",
               "legendFormat": "GO — RAM promedio",
               "instant": true
             },
@@ -390,7 +418,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "avg_over_time((process_resident_memory_bytes{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "expr": "(avg_over_time((process_resident_memory_bytes{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:1s])) or on() vector(0)",
               "legendFormat": "JAVA — RAM promedio",
               "instant": true
             },
@@ -400,7 +428,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "max_over_time((process_resident_memory_bytes{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "expr": "(max_over_time((process_resident_memory_bytes{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:1s])) or on() vector(0)",
               "legendFormat": "GO — RAM pico",
               "instant": true
             },
@@ -410,7 +438,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "max_over_time((process_resident_memory_bytes{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s])",
+              "expr": "(max_over_time((process_resident_memory_bytes{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:1s])) or on() vector(0)",
               "legendFormat": "JAVA — RAM pico",
               "instant": true
             },
@@ -420,7 +448,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum(max_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) or on() vector(0)",
+              "expr": "sum(max_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s])) or on() vector(0)",
               "legendFormat": "GO — peticiones",
               "instant": true
             },
@@ -430,7 +458,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum(max_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) or on() vector(0)",
+              "expr": "sum(max_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s])) or on() vector(0)",
               "legendFormat": "JAVA — peticiones",
               "instant": true
             }
@@ -474,7 +502,7 @@
                 "properties": [
                   {
                     "id": "unit",
-                    "value": "short"
+                    "value": "none"
                   },
                   {
                     "id": "decimals",
@@ -503,7 +531,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "1000 * sum(stress_run_duration_seconds{target=\"go\"}) / (sum(stress_run_requests_total{target=\"go\"}) > 0)",
+              "expr": "1000 * (sum(max_over_time((stress_run_duration_seconds{target=\"go\"} and on() (max(stress_run_active) == 1))[$__range:1s]))) / (sum(max_over_time((stress_run_requests_total{target=\"go\"} and on() (max(stress_run_active) == 1))[$__range:1s]))) and on() (sum(max_over_time((stress_run_requests_total{target=\"go\"} and on() (max(stress_run_active) == 1))[$__range:1s])) > 0) or on() vector(0)",
               "legendFormat": "GO — tiempo por 1k",
               "instant": true
             },
@@ -513,7 +541,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "1000 * sum(stress_run_duration_seconds{target=\"java\"}) / (sum(stress_run_requests_total{target=\"java\"}) > 0)",
+              "expr": "1000 * (sum(max_over_time((stress_run_duration_seconds{target=\"java\"} and on() (max(stress_run_active) == 1))[$__range:1s]))) / (sum(max_over_time((stress_run_requests_total{target=\"java\"} and on() (max(stress_run_active) == 1))[$__range:1s]))) and on() (sum(max_over_time((stress_run_requests_total{target=\"java\"} and on() (max(stress_run_active) == 1))[$__range:1s])) > 0) or on() vector(0)",
               "legendFormat": "JAVA — tiempo por 1k",
               "instant": true
             },
@@ -523,7 +551,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "1000 * sum(max_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:5s])) / (sum(max_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) > 0)",
+              "expr": "1000 * (sum(max_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((process_cpu_seconds_total{job=\"api-go\"} and on() (max(stress_run_active) == 1))[$__range:1s]))) / (sum(max_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s]))) and on() (sum(max_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s])) > 0) or on() vector(0)",
               "legendFormat": "GO — CPU por 1k",
               "instant": true
             },
@@ -533,7 +561,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "1000 * sum(max_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:5s])) / (sum(max_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) > 0)",
+              "expr": "1000 * (sum(max_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((process_cpu_seconds_total{job=\"api-java\"} and on() (max(stress_run_active) == 1))[$__range:1s]))) / (sum(max_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s]))) and on() (sum(max_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s])) > 0) or on() vector(0)",
               "legendFormat": "JAVA — CPU por 1k",
               "instant": true
             },
@@ -543,7 +571,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum(max_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) or on() vector(0)",
+              "expr": "sum(max_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((http_requests_total{job=\"api-go\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s])) or on() vector(0)",
               "legendFormat": "GO — medido sobre",
               "instant": true
             },
@@ -553,7 +581,7 @@
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum(max_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s]) - min_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:5s])) or on() vector(0)",
+              "expr": "sum(max_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s]) - min_over_time((http_requests_total{job=\"api-java\", status=\"200\"} and on() (max(stress_run_active) == 1))[$__range:1s])) or on() vector(0)",
               "legendFormat": "JAVA — medido sobre",
               "instant": true
             }

@@ -1,5 +1,20 @@
 global:
-  scrape_interval: 5s # Qué tan seguido se consultan las métricas
+  # Un raspado por segundo. No se puede acelerar solo durante las corridas:
+  # el intervalo es estático por job y Prometheus no reacciona a que
+  # stress_run_active valga 1, así que o es rápido siempre o no lo es.
+  #
+  # Sale a cuenta porque el raspado tarda entre 3 y 7 ms, muy por debajo del
+  # segundo, y porque el grano de 5 s se notaba en las corridas cortas: una
+  # de 2 segundos entraba en uno o dos raspados, y el acumulado dependía de
+  # dónde cayeran. Con 1 s entran ocho o diez.
+  #
+  # El coste es guardar cinco veces más muestras. Para las corridas de este
+  # proyecto, que duran minutos, no es problema.
+  #
+  # Si se cambia, hay que mover con él el paso de las subconsultas del
+  # dashboard ([$__range:1s]): una subconsulta más gruesa que el raspado tira
+  # muestras, y una más fina las repite sin aportar nada.
+  scrape_interval: 1s
 
 scrape_configs:
   - job_name: 'api-go'
