@@ -98,3 +98,25 @@ type stubRepo struct {
 func (s stubRepo) ListUsers(context.Context, int) ([]data.User, error) {
 	return s.users, nil
 }
+
+// TestCubosDeLatenciaCoincidenConJava fija la lista de cubos para que no
+// cambie en Go sin cambiarla también en Java. Cubos distintos entre las dos
+// tecnologías producen percentiles con precisión distinta, y la comparación
+// pasa a medir la instrumentación en vez de las tecnologías.
+//
+// La lista espejo vive en DataMetrics.LATENCY_BUCKETS_SECONDS.
+func TestCubosDeLatenciaCoincidenConJava(t *testing.T) {
+	esperados := []float64{
+		0.001, 0.002, 0.003, 0.005, 0.0075, 0.010, 0.015, 0.025,
+		0.050, 0.075, 0.100, 0.250, 0.500, 1.0, 2.5, 10.0,
+	}
+
+	if len(LatencyBuckets) != len(esperados) {
+		t.Fatalf("cubos: %d, esperados %d", len(LatencyBuckets), len(esperados))
+	}
+	for i, quiero := range esperados {
+		if LatencyBuckets[i] != quiero {
+			t.Errorf("cubo %d: %v, quiero %v", i, LatencyBuckets[i], quiero)
+		}
+	}
+}

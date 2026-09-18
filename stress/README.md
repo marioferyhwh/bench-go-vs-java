@@ -23,14 +23,27 @@ Sin opciones: 10.000 peticiones por tecnología, sin base de datos.
 | `--database` | Las peticiones consultan Postgres | apagada |
 | `--no-database` | Las peticiones esperan 50 ms simulados | — |
 | `--targets LISTA` | `go`, `java` o `go,java` | `go,java` |
-| `--vus N` | Usuarios virtuales concurrentes | 20 |
-| `--cold` | Reinicia los servicios y espera antes de lanzar | no |
+| `--vus N` | Usuarios virtuales **por tecnología** | 20 |
+| `--cold` | Reinicia los servicios y espera antes de lanzar | apagada |
+| `--warm` | No reinicia nada | defecto |
 | `--help` | Muestra la ayuda | — |
 
 `--requests` y `--duration` son excluyentes, y cada una elige qué se mide:
 
 - **`--requests`** fija el trabajo: ambas tecnologías atienden lo mismo y se compara cuánto tardan y cuánto gastan. Es el modo para medir **eficiencia**.
 - **`--duration`** fija el tiempo: cada una hace las peticiones que puede. Es el modo para medir **capacidad**, pero su consumo de CPU no es comparable porque no hicieron el mismo trabajo.
+
+## VUs
+
+`--vus` es **por tecnología**, no un total que se reparta. `--vus 20 --targets go,java` lanza 20 usuarios virtuales contra Go y otros 20 contra Java a la vez: 40 en total.
+
+Se hace así para que cada servicio reciba siempre la misma carga sin importar cuántos objetivos haya en la corrida, y para que dos corridas con el mismo `--vus` sean comparables entre sí.
+
+## Cierre de la corrida
+
+Al terminar la carga, k6 imprime el resumen y publica los resultados de inmediato. Después espera 30 segundos antes de marcar la corrida como apagada, para que Prometheus alcance a raspar el último tramo de tráfico y CPU y el acumulado del dashboard no se quede corto.
+
+Esa espera no retrasa los números: ya están en pantalla y en el Pushgateway cuando empieza. El valor vive en un solo sitio, `ESPERA_CIERRE_SEGUNDOS` en `scenarios/config.js`.
 
 ## Ejemplos
 

@@ -33,9 +33,13 @@ Opciones:
   --database          Las peticiones consultan Postgres
   --no-database       Las peticiones esperan 50 ms simulando la consulta
   --targets LISTA     go, java o go,java          (defecto: go,java)
-  --vus N             Usuarios virtuales          (defecto: 20)
+  --vus N             Usuarios virtuales por tecnología (defecto: 20)
   --cold              Reinicia los servicios y espera antes de lanzar
+  --warm              No reinicia nada             (defecto)
   --help              Muestra esta ayuda
+
+--vus es por tecnología, no un total que se reparta: --vus 20 --targets go,java
+lanza 20 contra Go y 20 contra Java a la vez, 40 en total.
 
 --requests y --duration son excluyentes: una fija el trabajo, la otra el tiempo.
 
@@ -79,6 +83,32 @@ entero_positivo() {
   fi
 }
 
+# Se valida aquí y no solo en k6 porque el valor viaja como etiqueta al
+# Pushgateway: un carácter suelto rompería el formato y el empuje se perdería.
+duracion_valida() {
+  bandera=$1
+  valor=$2
+  if ! echo "$valor" | grep -Eq '^([0-9]+(\.[0-9]+)?(ns|us|ms|s|m|h))+$'; then
+    error "$bandera debe ser una duración de k6 (30s, 2m, 1h30m), recibido: \"$valor\"."
+  fi
+}
+
+# Los mismos objetivos que conoce scenarios/config.js. Validarlos aquí evita
+# arrancar el contenedor para que falle dentro.
+objetivos_validos() {
+  bandera=$1
+  lista=$2
+  IFS=,
+  for nombre in $lista; do
+    case $nombre in
+      go | java) ;;
+      '') error "$bandera tiene un objetivo vacío: \"$lista\"." ;;
+      *) error "$bandera: objetivo desconocido \"$nombre\". Objetivos válidos: go, java." ;;
+    esac
+  done
+  unset IFS
+}
+
 # Lo que pidan las banderas. Vacío significa "no se pidió".
 flag_mode=
 flag_requests=
@@ -104,6 +134,7 @@ while [ $# -gt 0 ]; do
         error "--requests y --duration son excluyentes: elige fijar el trabajo o el tiempo."
       fi
       flag_duration=$(valor_de "$1" "${2:-}")
+      duracion_valida --duration "$flag_duration"
       flag_mode=duration
       shift 2
       ;;
@@ -114,18 +145,29 @@ while [ $# -gt 0 ]; do
       ;;
     --targets)
       flag_targets=$(valor_de "$1" "${2:-}")
+      objetivos_validos --targets "$flag_targets"
       shift 2
       ;;
     --database)
+      if [ "$flag_use_database" = false ]; then
+        error "--database y --no-database son excluyentes."
+      fi
       flag_use_database=true
       shift
       ;;
     --no-database)
+      if [ "$flag_use_database" = true ]; then
+        error "--database y --no-database son excluyentes."
+      fi
       flag_use_database=false
       shift
       ;;
     --cold)
       cold=true
+      shift
+      ;;
+    --warm)
+      cold=false
       shift
       ;;
     --help | -h)
@@ -145,6 +187,26 @@ duration=${flag_duration:-${DURATION:-$DEFAULT_DURATION}}
 vus=${flag_vus:-${VUS:-$DEFAULT_VUS}}
 targets=${flag_targets:-${TARGETS:-$DEFAULT_TARGETS}}
 use_database=${flag_use_database:-${USE_DATABASE:-$DEFAULT_USE_DATABASE}}
+
+# Un valor que llegó por el entorno no pasó por la validación de su bandera, y
+# aun así acaba en el contenedor y en las etiquetas del Pushgateway.
+entero_positivo VUS "$vus"
+objetivos_validos TARGETS "$targets"
+if [ "$mode" = requests ]; then
+  entero_positivo REQUESTS "$requests"
+else
+  duracion_valida DURATION "$duration"
+fi
+
+case $use_database in
+  true | false) ;;
+  *) error "USE_DATABASE debe ser \"true\" o \"false\", recibido: \"$use_database\"." ;;
+esac
+
+case $mode in
+  requests | duration) ;;
+  *) error "MODE debe ser \"requests\" o \"duration\", recibido: \"$mode\"." ;;
+esac
 
 if [ "$mode" = requests ]; then
   carga="$requests peticiones por tecnología"
@@ -174,17 +236,24 @@ if [ "$cold" = true ]; then
   echo "Reiniciando servicios para medir en frío..."
   docker compose -f "$ROOT/compose.yml" restart go-service java-service
 
-  case $targets in
-    *go*) esperar_servicio go-service 8080 ;;
-  esac
-  case $targets in
-    *java*) esperar_servicio java-service 8081 ;;
-  esac
+  # Nombre exacto y no substring: un objetivo futuro que contuviera "go"
+  # dispararía la espera del servicio equivocado.
+  IFS=,
+  for nombre in $targets; do
+    case $nombre in
+      go) esperar_servicio go-service 8080 ;;
+      java) esperar_servicio java-service 8081 ;;
+    esac
+  done
+  unset IFS
 
   echo "Servicios listos."
 fi
 
-echo "Lanzando: modo=$mode | $carga | base de datos=$use_database | objetivos=$targets | $vus VUs"
+echo "Lanzando: modo=$mode | $carga | base de datos=$use_database | objetivos=$targets | $vus VUs por tecnología"
+
+echo "Construyendo imágenes antes del run..."
+docker compose -f "$ROOT/compose.yml" build k6
 
 docker compose -f "$ROOT/compose.yml" run --rm \
   -e MODE="$mode" \

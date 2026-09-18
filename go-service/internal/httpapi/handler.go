@@ -13,6 +13,20 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
+// LatencyBuckets son los cubos del histograma de latencia, en segundos. La
+// lista es idéntica a la del servicio Java y no debe cambiar en una sola de
+// las dos: histogram_quantile interpola dentro del cubo donde cae el
+// percentil, así que cubos distintos producen percentiles con precisión
+// distinta y la comparación deja de medir las tecnologías para medir la
+// instrumentación.
+//
+// Es densa entre 1 y 100 ms, que es donde viven estas latencias, y mantiene
+// una cola hasta 10 s para los arranques en frío de la JVM.
+var LatencyBuckets = []float64{
+	0.001, 0.002, 0.003, 0.005, 0.0075, 0.010, 0.015, 0.025,
+	0.050, 0.075, 0.100, 0.250, 0.500, 1.0, 2.5, 10.0,
+}
+
 type errorBody struct {
 	Error string `json:"error"`
 }
@@ -37,7 +51,7 @@ func NewHandler(svc *data.Service, reg prometheus.Registerer) *Handler {
 		prometheus.HistogramOpts{
 			Name:    "http_request_duration_seconds",
 			Help:    "Latencia de /data en segundos.",
-			Buckets: prometheus.DefBuckets,
+			Buckets: LatencyBuckets,
 		},
 		[]string{"status", "mode"},
 	)
