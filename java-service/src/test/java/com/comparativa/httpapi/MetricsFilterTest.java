@@ -83,6 +83,48 @@ class MetricsFilterTest {
         assertThat(registry.find("http_requests_total").counters()).isEmpty();
     }
 
+    /**
+     * Mismo esquema de labels que Go: method, route, status y mode, en las tres
+     * métricas HTTP.
+     */
+    @Test
+    void lasMetricasLlevanMethodYRoute() throws Exception {
+        ejecutar("GET", "/data", "yes", 400);
+
+        for (String nombre : new String[] {
+                "http_requests_total", "http_errors_total", "http_request_duration_seconds"}) {
+            assertThat(registry.find(nombre)
+                            .tag("method", "GET")
+                            .tag("route", "/data")
+                            .tag("status", "400")
+                            .tag("mode", "unknown")
+                            .meter())
+                    .as(nombre)
+                    .isNotNull();
+        }
+    }
+
+    /** Un 200 no suma errores; un 405 sí, con method="POST". */
+    @Test
+    void erroresSoloCuentanStatusDe400EnAdelante() throws Exception {
+        ejecutar("GET", "/data", null, 200);
+        ejecutar("POST", "/data", null, 405);
+
+        assertThat(registry.find("http_errors_total").counters()).hasSize(1);
+        assertThat(registry.find("http_errors_total")
+                        .tag("method", "POST")
+                        .tag("status", "405")
+                        .counter()
+                        .count())
+                .isEqualTo(1);
+    }
+
+    @Test
+    void metodoDesconocidoSeEtiquetaOther() {
+        assertThat(DataMetrics.methodLabel("BREW")).isEqualTo("OTHER");
+        assertThat(DataMetrics.methodLabel("GET")).isEqualTo("GET");
+    }
+
     private void ejecutar(String metodo, String ruta, String useDatabase, int status)
             throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(metodo, ruta);

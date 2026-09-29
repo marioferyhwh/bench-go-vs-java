@@ -60,6 +60,7 @@ public class MetricsFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
         } finally {
             metrics.record(
+                    request.getMethod(),
                     response.getStatus(),
                     modoDe(request),
                     Duration.ofNanos(System.nanoTime() - inicio));

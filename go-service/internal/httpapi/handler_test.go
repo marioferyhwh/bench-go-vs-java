@@ -120,3 +120,92 @@ func TestCubosDeLatenciaCoincidenConJava(t *testing.T) {
 		}
 	}
 }
+
+// TestMetricasLlevanMethodRouteStatusMode fija el esquema de labels, igual al
+// de DataMetrics en Java: method, route, status y mode.
+func TestMetricasLlevanMethodRouteStatusMode(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	h := NewHandler(data.NewService(nil), reg)
+
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/data?useDatabase=yes", nil))
+
+	quiero := map[string]string{"method": "GET", "route": "/data", "status": "400", "mode": "unknown"}
+	for _, nombre := range []string{"http_requests_total", "http_errors_total", "http_request_duration_seconds"} {
+		if got := labelsDe(t, reg, nombre); !mismosLabels(got, quiero) {
+			t.Errorf("%s: labels %v, quiero %v", nombre, got, quiero)
+		}
+	}
+}
+
+// TestErroresSoloCuentanStatusDe400EnAdelante comprueba que un 200 no suma
+// en http_errors_total y un 405 sí, con method="POST".
+func TestErroresSoloCuentanStatusDe400EnAdelante(t *testing.T) {
+	reg := prometheus.NewRegistry()
+	h := NewHandler(data.NewService(stubRepo{}), reg)
+
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/data?useDatabase=true", nil))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/data", nil))
+
+	familias, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range familias {
+		if f.GetName() != "http_errors_total" {
+			continue
+		}
+		if len(f.GetMetric()) != 1 {
+			t.Fatalf("http_errors_total: %d series, quiero 1 (solo el 405)", len(f.GetMetric()))
+		}
+		labels := map[string]string{}
+		for _, l := range f.GetMetric()[0].GetLabel() {
+			labels[l.GetName()] = l.GetValue()
+		}
+		if labels["status"] != "405" || labels["method"] != "POST" {
+			t.Errorf("serie de error inesperada: %v", labels)
+		}
+		return
+	}
+	t.Fatal("no se publicó http_errors_total")
+}
+
+func TestMetodoDesconocidoSeEtiquetaOther(t *testing.T) {
+	if got := methodLabel("BREW"); got != "OTHER" {
+		t.Errorf("methodLabel(BREW) = %q, quiero OTHER", got)
+	}
+	if got := methodLabel(http.MethodGet); got != "GET" {
+		t.Errorf("methodLabel(GET) = %q, quiero GET", got)
+	}
+}
+
+func labelsDe(t *testing.T, reg *prometheus.Registry, nombre string) map[string]string {
+	t.Helper()
+	familias, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range familias {
+		if f.GetName() != nombre || len(f.GetMetric()) == 0 {
+			continue
+		}
+		labels := map[string]string{}
+		for _, l := range f.GetMetric()[0].GetLabel() {
+			labels[l.GetName()] = l.GetValue()
+		}
+		return labels
+	}
+	t.Fatalf("no se publicó %s", nombre)
+	return nil
+}
+
+func mismosLabels(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range b {
+		if a[k] != v {
+			return false
+		}
+	}
+	return true
+}

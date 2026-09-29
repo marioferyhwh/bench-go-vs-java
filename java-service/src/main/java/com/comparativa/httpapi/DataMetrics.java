@@ -4,11 +4,13 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import java.time.Duration;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /**
- * Publica las mismas métricas que el servicio Go: http_requests_total y
- * http_request_duration_seconds, etiquetadas por status y mode.
+ * Publica las mismas métricas que el servicio Go: http_requests_total,
+ * http_errors_total y http_request_duration_seconds, etiquetadas por method,
+ * route, status y mode.
  */
 @Component
 public class DataMetrics {
@@ -31,30 +33,64 @@ public class DataMetrics {
         0.050, 0.075, 0.100, 0.250, 0.500, 1.0, 2.5, 10.0
     };
 
+    /** Valor del label route. El servicio solo mide /data, igual que Go. */
+    public static final String ROUTE = "/data";
+
+    /**
+     * Métodos que se etiquetan tal cual. Cualquier otro sale como "OTHER": un
+     * método arbitrario enviado por un cliente crearía una serie por valor.
+     * La lista es la misma que knownMethods en Go.
+     */
+    private static final Set<String> KNOWN_METHODS =
+            Set.of("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
+
     private final MeterRegistry registry;
 
     public DataMetrics(MeterRegistry registry) {
         this.registry = registry;
     }
 
-    public void record(int status, String mode, Duration elapsed) {
+    public void record(String method, int status, String mode, Duration elapsed) {
         String statusLabel = String.valueOf(status);
+        String methodLabel = methodLabel(method);
 
         Counter.builder("http_requests_total")
                 .description("Total de peticiones HTTP a /data.")
+                .tag("method", methodLabel)
+                .tag("route", ROUTE)
                 .tag("status", statusLabel)
                 .tag("mode", mode)
                 .register(registry)
                 .increment();
 
+        // Contador aparte para status >= 400, como en Go y en el video de
+        // referencia: el error rate sale de una serie pequeña y directa.
+        if (status >= 400) {
+            Counter.builder("http_errors_total")
+                    .description("Total de respuestas de /data con status >= 400.")
+                    .tag("method", methodLabel)
+                    .tag("route", ROUTE)
+                    .tag("status", statusLabel)
+                    .tag("mode", mode)
+                    .register(registry)
+                    .increment();
+        }
+
         Timer.builder("http_request_duration_seconds")
                 .description("Latencia de /data en segundos.")
                 .serviceLevelObjectives(bucketsAsDurations())
                 .publishPercentileHistogram(false)
+                .tag("method", methodLabel)
+                .tag("route", ROUTE)
                 .tag("status", statusLabel)
                 .tag("mode", mode)
                 .register(registry)
                 .record(elapsed);
+    }
+
+    /** El método tal cual si es estándar, u "OTHER" si no. */
+    static String methodLabel(String method) {
+        return KNOWN_METHODS.contains(method) ? method : "OTHER";
     }
 
     /**

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/marioferyhwh/comparativo-tec/go-service/internal/data"
 	"github.com/marioferyhwh/comparativo-tec/go-service/internal/httpapi"
+	"github.com/marioferyhwh/comparativo-tec/go-service/internal/runtimemetrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -39,7 +41,9 @@ func main() {
 	registry.MustRegister(
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 		collectors.NewGoCollector(),
+		runtimemetrics.NewMemoryCollector(),
 	)
+	startup := runtimemetrics.NewStartupGauge(registry)
 	handler := httpapi.NewHandler(data.NewService(repo), registry)
 
 	mux := http.NewServeMux()
@@ -52,8 +56,16 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	// Se abre el socket aparte para marcar el arranque con el servidor ya
+	// aceptando conexiones, no antes.
+	listener, err := net.Listen("tcp", server.Addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	startup.MarkReady()
+
 	log.Printf("servidor Go escuchando en %s", server.Addr)
-	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
 }

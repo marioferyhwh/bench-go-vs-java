@@ -27,6 +27,23 @@ var LatencyBuckets = []float64{
 	0.050, 0.075, 0.100, 0.250, 0.500, 1.0, 2.5, 10.0,
 }
 
+// Route es el valor del label route. El servicio solo mide /data, así que es
+// constante, pero el label deja el esquema igual al de Java y al del video de
+// referencia (method, route, status).
+const Route = "/data"
+
+// knownMethods acota el label method: un método arbitrario enviado por un
+// cliente crearía una serie nueva por cada valor distinto.
+var knownMethods = map[string]bool{
+	http.MethodGet: true, http.MethodHead: true, http.MethodPost: true,
+	http.MethodPut: true, http.MethodPatch: true, http.MethodDelete: true,
+	http.MethodOptions: true,
+}
+
+// metricLabels son los labels de las tres métricas HTTP, en el mismo orden que
+// DataMetrics en Java.
+var metricLabels = []string{"method", "route", "status", "mode"}
+
 type errorBody struct {
 	Error string `json:"error"`
 }
@@ -35,6 +52,7 @@ type errorBody struct {
 type Handler struct {
 	svc       *data.Service
 	requests  *prometheus.CounterVec
+	errors    *prometheus.CounterVec
 	latencies *prometheus.HistogramVec
 }
 
@@ -45,7 +63,17 @@ func NewHandler(svc *data.Service, reg prometheus.Registerer) *Handler {
 			Name: "http_requests_total",
 			Help: "Total de peticiones HTTP a /data.",
 		},
-		[]string{"status", "mode"},
+		metricLabels,
+	)
+	// Contador aparte para status >= 400. Se puede deducir de
+	// http_requests_total, pero así el error rate es una consulta directa
+	// sobre una serie pequeña, como propone el video de referencia.
+	errorsTotal := prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "http_errors_total",
+			Help: "Total de respuestas de /data con status >= 400.",
+		},
+		metricLabels,
 	)
 	latencies := prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
@@ -53,11 +81,11 @@ func NewHandler(svc *data.Service, reg prometheus.Registerer) *Handler {
 			Help:    "Latencia de /data en segundos.",
 			Buckets: LatencyBuckets,
 		},
-		[]string{"status", "mode"},
+		metricLabels,
 	)
-	reg.MustRegister(requests, latencies)
+	reg.MustRegister(requests, errorsTotal, latencies)
 
-	return &Handler{svc: svc, requests: requests, latencies: latencies}
+	return &Handler{svc: svc, requests: requests, errors: errorsTotal, latencies: latencies}
 }
 
 // ServeHTTP resuelve GET /data?useDatabase=<true|false>.
@@ -65,13 +93,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 
 	if r.Method != http.MethodGet {
-		h.write(w, http.StatusMethodNotAllowed, "unknown", start, errorBody{Error: "method not allowed"})
+		h.write(w, r, http.StatusMethodNotAllowed, "unknown", start, errorBody{Error: "method not allowed"})
 		return
 	}
 
 	useDatabase, err := parseUseDatabase(r.URL.Query().Get("useDatabase"))
 	if err != nil {
-		h.write(w, http.StatusBadRequest, "unknown", start, errorBody{Error: "invalid useDatabase value"})
+		h.write(w, r, http.StatusBadRequest, "unknown", start, errorBody{Error: "invalid useDatabase value"})
 		return
 	}
 
@@ -83,14 +111,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	result, err := h.svc.Get(r.Context(), useDatabase)
 	if err != nil {
 		if errors.Is(err, data.ErrDatabaseUnavailable) {
-			h.write(w, http.StatusServiceUnavailable, mode, start, errorBody{Error: "database unavailable"})
+			h.write(w, r, http.StatusServiceUnavailable, mode, start, errorBody{Error: "database unavailable"})
 			return
 		}
-		h.write(w, http.StatusInternalServerError, mode, start, errorBody{Error: "internal error"})
+		h.write(w, r, http.StatusInternalServerError, mode, start, errorBody{Error: "internal error"})
 		return
 	}
 
-	h.write(w, http.StatusOK, mode, start, result)
+	h.write(w, r, http.StatusOK, mode, start, result)
 }
 
 // parseUseDatabase acepta solo "true", "false" o vacío (equivalente a false).
@@ -104,13 +132,34 @@ func parseUseDatabase(raw string) (bool, error) {
 	return raw == "true", nil
 }
 
-// write serializa el cuerpo y registra las métricas de la petición.
-func (h *Handler) write(w http.ResponseWriter, status int, mode string, start time.Time, body any) {
-	labels := prometheus.Labels{"status": strconv.Itoa(status), "mode": mode}
-	h.requests.With(labels).Inc()
-	h.latencies.With(labels).Observe(time.Since(start).Seconds())
-
+// write serializa el cuerpo y después registra las métricas de la petición.
+//
+// La latencia se observa tras serializar, no antes: Java la mide en
+// MetricsFilter, que envuelve también la escritura del JSON, y el video de
+// referencia mide hasta que la respuesta se envía. Parar antes dejaba fuera de
+// Go el coste de codificar hasta 100 usuarios que Java sí pagaba.
+func (h *Handler) write(w http.ResponseWriter, r *http.Request, status int, mode string, start time.Time, body any) {
 	writeJSON(w, status, body)
+
+	labels := prometheus.Labels{
+		"method": methodLabel(r.Method),
+		"route":  Route,
+		"status": strconv.Itoa(status),
+		"mode":   mode,
+	}
+	h.requests.With(labels).Inc()
+	if status >= http.StatusBadRequest {
+		h.errors.With(labels).Inc()
+	}
+	h.latencies.With(labels).Observe(time.Since(start).Seconds())
+}
+
+// methodLabel devuelve el método tal cual si es estándar, u "OTHER" si no.
+func methodLabel(method string) string {
+	if knownMethods[method] {
+		return method
+	}
+	return "OTHER"
 }
 
 // writeJSON serializa el cuerpo como JSON con el código dado.
