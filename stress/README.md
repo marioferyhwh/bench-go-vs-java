@@ -1,6 +1,6 @@
 # Herramienta de estrés
 
-Genera carga contra `GET /data` en Go y en Java para obtener los números que exige el principio 7 de la constitución. Sin esto no se puede afirmar que una tecnología es más rápida que la otra.
+Genera carga contra `GET /data` en Go y en Java para obtener números medidos. Sin esto no se puede afirmar que una tecnología es más rápida que la otra: en este proyecto ninguna afirmación de rendimiento vale sin una corrida que la respalde.
 
 Usa [k6](https://k6.io/), que corre como un servicio más del compose. El escenario está en `scenarios/data.js`.
 
@@ -135,4 +135,4 @@ curl -s http://localhost:9091/metrics | grep 'stress_run_active{'
 curl -X DELETE http://localhost:9091/metrics/job/k6_stress/run_id/1789740547
 ```
 
-El contrato completo está en `docs/specs/stress-tool/spec.md`.
+Lo que mide cada panel del dashboard, y cómo interpretarlo, está en la propia descripción de cada panel en Grafana: el icono de información de la esquina.

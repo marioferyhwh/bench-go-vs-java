@@ -1,3 +1,10 @@
+# Techo global de logs: máximo 5 archivos de 100 MB por contenedor (500 MB tope).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "5"
+
 services:
   postgres:
     build: ./database
@@ -12,6 +19,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    logging: *default-logging
 
   go-service:
     build: ./go-service
@@ -33,6 +41,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    logging: *default-logging
 
   java-service:
     build: ./java-service
@@ -54,6 +63,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    logging: *default-logging
 
   # Buzón para k6: vive 30 segundos y muere, así que Prometheus nunca alcanza
   # a rasparlo. k6 empuja aquí y Prometheus lo lee de este contenedor.
@@ -63,6 +73,7 @@ services:
     container_name: pushgateway
     ports:
       - "9091:9091"
+    logging: *default-logging
 
   prometheus:
     image: prom/prometheus:latest
@@ -75,6 +86,7 @@ services:
       - go-service
       - java-service
       - pushgateway
+    logging: *default-logging
 
   grafana:
     image: grafana/grafana:latest
@@ -90,6 +102,7 @@ services:
       - ./analitics/grafana/dashboards:/var/lib/grafana/dashboards
     depends_on:
       - prometheus
+    logging: *default-logging
 
   # No arranca con `up`: se lanza a demanda, normalmente con ./stress/stress.sh
   # Estos defectos son los mismos que usa el script y el escenario de k6.
@@ -108,3 +121,4 @@ services:
       - REQUESTS=${REQUESTS:-10000}
       - PUSHGATEWAY_URL=${PUSHGATEWAY_URL:-http://pushgateway:9091}
     command: ["run", "/scripts/data.js"]
+    logging: *default-logging
