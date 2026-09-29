@@ -136,3 +136,27 @@ curl -X DELETE http://localhost:9091/metrics/job/k6_stress/run_id/1789740547
 ```
 
 Lo que mide cada panel del dashboard, y cómo interpretarlo, está en la propia descripción de cada panel en Grafana: el icono de información de la esquina.
+
+
+## Repetir corridas y hacer pausas
+
+Puedes ejecutar varias corridas consecutivas y dejar un intervalo entre ellas. Esto resulta útil para comparar resultados repetibles o para dar tiempo a que los servicios y el sistema recuperen su estado entre mediciones.
+
+- `--repeat 5`: ejecuta la misma configuración cinco veces.
+- `--pause 30s`: espera 30 segundos entre corridas. Acepta valores como `10s`, `1m` o `500ms`.
+
+La configuración de cada repetición es idéntica. Cada corrida conserva su propio identificador en el Pushgateway, por lo que puedes analizarlas por separado en Grafana. La pausa no forma parte de la duración ni de las métricas de carga de ninguna corrida.
+
+### Ejemplos
+
+Cinco mediciones sin base de datos, con 30 segundos entre ellas:
+
+```sh
+./stress/stress.sh --requests 50000 --repeat 5 --pause 30s
+```
+```sh
+./stress/stress.sh --requests 50000 --repeat 5 --pause 30s --database
+```
+```sh
+./stress/stress.sh --requests 50000 --repeat 5 --pause 30s --database --cold
+```

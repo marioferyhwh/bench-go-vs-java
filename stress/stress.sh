@@ -15,6 +15,10 @@ DEFAULT_DURATION=30s
 DEFAULT_VUS=20
 DEFAULT_TARGETS=go,java
 DEFAULT_USE_DATABASE=false
+# Solo los usa este script: k6 no sabe que hay repeticiones, cada una es una
+# corrida completa con su propio run_id.
+DEFAULT_REPEAT=1
+DEFAULT_PAUSE=0
 
 # Raíz del compose, a partir de la ubicación del script y no del directorio
 # actual, para poder lanzarlo desde cualquier sitio.
@@ -36,6 +40,9 @@ Opciones:
   --vus N             Usuarios virtuales por tecnología (defecto: 20)
   --cold              Reinicia los servicios y espera antes de lanzar
   --warm              No reinicia nada             (defecto)
+  --repeat N          Lanza la misma corrida N veces seguidas (defecto: 1)
+  --pause T           Espera T entre una corrida y la siguiente, en
+                      segundos o con unidad: 30, 30s, 2m (defecto: 0)
   --help              Muestra esta ayuda
 
 --vus es por tecnología, no un total que se reparta: --vus 20 --targets go,java
@@ -43,13 +50,19 @@ lanza 20 contra Go y 20 contra Java a la vez, 40 en total.
 
 --requests y --duration son excluyentes: una fija el trabajo, la otra el tiempo.
 
+--repeat repite la corrida con los mismos parámetros; cada repetición es una
+corrida aparte, con su propio run_id y su fila en el dashboard. Con --cold los
+servicios se reinician antes de cada repetición, no solo antes de la primera.
+
 Ejemplos:
   stress.sh --requests 10000 --database     Comparar eficiencia contra Postgres
   stress.sh --duration 60s --vus 40         Ver cuánto aguanta cada tecnología
   stress.sh --requests 10000 --cold         Medir con los servicios recién arrancados
+  stress.sh --requests 50000 --database --repeat 5 --pause 30s
+                                            Cinco corridas iguales, 30 s entre ellas
 
 Las variables de entorno (MODE, REQUESTS, DURATION, VUS, TARGETS,
-USE_DATABASE) se respetan si están puestas; las banderas tienen prioridad.
+USE_DATABASE, REPEAT, PAUSE) se respetan si están puestas; las banderas tienen prioridad.
 FIN
 }
 
@@ -93,6 +106,22 @@ duracion_valida() {
   fi
 }
 
+# Acepta segundos a secas (30) o con unidad s o m (30s, 2m) y devuelve
+# segundos, que es lo que entiende sleep en cualquier sistema POSIX.
+a_segundos() {
+  bandera=$1
+  valor=$2
+  case $valor in
+    *m) numero=${valor%m}; factor=60 ;;
+    *s) numero=${valor%s}; factor=1 ;;
+    *) numero=$valor; factor=1 ;;
+  esac
+  case $numero in
+    '' | *[!0-9]*) error "$bandera debe ser un tiempo en segundos o con unidad (30, 30s, 2m), recibido: \"$valor\"." ;;
+  esac
+  echo $((numero * factor))
+}
+
 # Los mismos objetivos que conoce scenarios/config.js. Validarlos aquí evita
 # arrancar el contenedor para que falle dentro.
 objetivos_validos() {
@@ -116,6 +145,8 @@ flag_duration=
 flag_vus=
 flag_targets=
 flag_use_database=
+flag_repeat=
+flag_pause=
 cold=false
 
 while [ $# -gt 0 ]; do
@@ -170,6 +201,16 @@ while [ $# -gt 0 ]; do
       cold=false
       shift
       ;;
+    --repeat)
+      flag_repeat=$(valor_de "$1" "${2:-}")
+      entero_positivo --repeat "$flag_repeat"
+      shift 2
+      ;;
+    --pause)
+      flag_pause=$(valor_de "$1" "${2:-}")
+      a_segundos --pause "$flag_pause" >/dev/null
+      shift 2
+      ;;
     --help | -h)
       uso
       exit 0
@@ -187,10 +228,14 @@ duration=${flag_duration:-${DURATION:-$DEFAULT_DURATION}}
 vus=${flag_vus:-${VUS:-$DEFAULT_VUS}}
 targets=${flag_targets:-${TARGETS:-$DEFAULT_TARGETS}}
 use_database=${flag_use_database:-${USE_DATABASE:-$DEFAULT_USE_DATABASE}}
+repeat=${flag_repeat:-${REPEAT:-$DEFAULT_REPEAT}}
+pause=${flag_pause:-${PAUSE:-$DEFAULT_PAUSE}}
 
 # Un valor que llegó por el entorno no pasó por la validación de su bandera, y
 # aun así acaba en el contenedor y en las etiquetas del Pushgateway.
 entero_positivo VUS "$vus"
+entero_positivo REPEAT "$repeat"
+pausa_segundos=$(a_segundos PAUSE "$pause")
 objetivos_validos TARGETS "$targets"
 if [ "$mode" = requests ]; then
   entero_positivo REQUESTS "$requests"
@@ -232,7 +277,8 @@ esperar_servicio() {
   error "$nombre no respondió tras 60 segundos. Revisa: docker compose logs $nombre"
 }
 
-if [ "$cold" = true ]; then
+# Reinicia los servicios estresados y espera a que respondan.
+reiniciar_en_frio() {
   echo "Reiniciando servicios para medir en frío..."
   docker compose -f "$ROOT/compose.yml" restart go-service java-service
 
@@ -248,18 +294,53 @@ if [ "$cold" = true ]; then
   unset IFS
 
   echo "Servicios listos."
-fi
+}
+
+hora() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}
 
 echo "Lanzando: modo=$mode | $carga | base de datos=$use_database | objetivos=$targets | $vus VUs por tecnología"
+if [ "$repeat" -gt 1 ]; then
+  echo "Repeticiones: $repeat | pausa entre corridas: ${pausa_segundos} s | en frío: $cold"
+fi
 
+# Se construye una vez para toda la tanda: reconstruir en cada repetición solo
+# añadiría espera entre corridas.
 echo "Construyendo imágenes antes del run..."
 docker compose -f "$ROOT/compose.yml" build k6
 
-docker compose -f "$ROOT/compose.yml" run --rm \
-  -e MODE="$mode" \
-  -e REQUESTS="$requests" \
-  -e DURATION="$duration" \
-  -e VUS="$vus" \
-  -e TARGETS="$targets" \
-  -e USE_DATABASE="$use_database" \
-  k6
+inicio_tanda=$(hora)
+corrida=1
+while [ "$corrida" -le "$repeat" ]; do
+  if [ "$corrida" -gt 1 ] && [ "$pausa_segundos" -gt 0 ]; then
+    echo "Pausa de ${pausa_segundos} s antes de la siguiente corrida..."
+    sleep "$pausa_segundos"
+  fi
+
+  if [ "$cold" = true ]; then
+    reiniciar_en_frio
+  fi
+
+  if [ "$repeat" -gt 1 ]; then
+    echo "=== Corrida $corrida de $repeat ($(hora)) ==="
+  fi
+
+  # Si una corrida falla, la tanda se corta (set -e): seguir mezclaría
+  # corridas buenas con un estado que no sabemos cuál es.
+  docker compose -f "$ROOT/compose.yml" run --rm \
+    -e MODE="$mode" \
+    -e REQUESTS="$requests" \
+    -e DURATION="$duration" \
+    -e VUS="$vus" \
+    -e TARGETS="$targets" \
+    -e USE_DATABASE="$use_database" \
+    k6
+
+  corrida=$((corrida + 1))
+done
+
+if [ "$repeat" -gt 1 ]; then
+  echo "Tanda terminada: $repeat corridas entre $inicio_tanda y $(hora) (UTC)."
+  echo "En Grafana, ajusta el rango a esa franja: la tabla de la sección 1 muestra una fila por corrida y tecnología."
+fi
