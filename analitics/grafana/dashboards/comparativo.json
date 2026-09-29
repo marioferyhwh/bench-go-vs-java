@@ -8,7 +8,24 @@
     "to": "now"
   },
   "templating": {
-    "list": []
+    "list": [
+      {
+        "type": "constant",
+        "name": "cpu_limit",
+        "label": "Límite de CPU (núcleos)",
+        "query": "2",
+        "hide": 2,
+        "description": "Igual a SERVICE_CPUS en compose.yml. Si se cambia allí, hay que cambiarlo aquí."
+      },
+      {
+        "type": "constant",
+        "name": "mem_limit_bytes",
+        "label": "Límite de memoria (bytes)",
+        "query": "536870912",
+        "hide": 2,
+        "description": "Igual a SERVICE_MEMORY (512m) en compose.yml. Si se cambia allí, hay que cambiarlo aquí."
+      }
+    ]
   },
   "panels": [
     {
@@ -594,7 +611,7 @@
         {
           "id": 5,
           "title": "Respuestas con error",
-          "description": "Todo lo que no sea 200. Debe estar plano en cero: si sube durante una corrida, los números de esa corrida no valen y hay que repetirla.",
+          "description": "Respuestas con status >= 400, de http_errors_total. Debe estar plano en cero: si sube durante una corrida, los números de esa corrida no valen y hay que repetirla.",
           "type": "timeseries",
           "gridPos": {
             "h": 4,
@@ -623,7 +640,7 @@
           },
           "targets": [
             {
-              "expr": "sum by (job, status) (rate(http_requests_total{status!=\"200\"}[1m]))",
+              "expr": "sum by (job, status) (rate(http_errors_total[$__rate_interval]))",
               "legendFormat": "{{job}} — {{status}}",
               "refId": "A",
               "datasource": {
@@ -654,7 +671,7 @@
         {
           "id": 6,
           "title": "Peticiones por segundo",
-          "description": "Throughput instantáneo de cada tecnología. Muestra la forma de la carga en el tiempo; para comparar consumo usa el panel de coste por mil peticiones.",
+          "description": "Throughput instantáneo de cada tecnología: el total de peticiones atendidas y, aparte, las que respondieron 200. Si las dos líneas se separan, hay errores. Para comparar consumo usa el panel de coste por mil peticiones.",
           "type": "timeseries",
           "gridPos": {
             "h": 8,
@@ -674,9 +691,18 @@
           },
           "targets": [
             {
-              "expr": "sum by (job) (rate(http_requests_total{status=\"200\"}[1m]))",
-              "legendFormat": "{{job}}",
+              "expr": "sum by (job) (rate(http_requests_total[$__rate_interval]))",
+              "legendFormat": "{{job}} total",
               "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "expr": "sum by (job) (rate(http_requests_total{status=\"200\"}[$__rate_interval]))",
+              "legendFormat": "{{job}} 200",
+              "refId": "B",
               "datasource": {
                 "type": "prometheus",
                 "uid": "prometheus"
@@ -767,7 +793,7 @@
           },
           "targets": [
             {
-              "expr": "rate(process_cpu_seconds_total{job=\"api-go\"}[1m])",
+              "expr": "rate(process_cpu_seconds_total{job=\"api-go\"}[$__rate_interval])",
               "legendFormat": "go",
               "refId": "A",
               "datasource": {
@@ -776,7 +802,7 @@
               }
             },
             {
-              "expr": "rate(process_cpu_seconds_total{job=\"api-java\"}[1m])",
+              "expr": "rate(process_cpu_seconds_total{job=\"api-java\"}[$__rate_interval])",
               "legendFormat": "java",
               "refId": "B",
               "datasource": {
@@ -792,8 +818,8 @@
         },
         {
           "id": 12,
-          "title": "Latencia p95 y p99",
-          "description": "De cada 100 peticiones, 95 o 99 tardaron menos que esto. Se usan percentiles y no la media a propósito: la media esconde las pausas del recolector de basura, que es justo donde la JVM se diferencia de Go. Miden predictibilidad bajo carga, no velocidad promedio. Van los dos juntos porque uno solo no distingue una latencia alta sostenida de una con picos aislados: el p95 describe la experiencia habitual bajo carga, el p99 la cola. Si van pegados el servicio es estable; si el p99 se dispara sobre el p95, hay picos que el promedio no vería.",
+          "title": "Latencia p50, p95 y p99",
+          "description": "De cada 100 peticiones, 50, 95 o 99 tardaron menos que esto. El p50 es la experiencia típica; el p95 y el p99, la cola. Se usan percentiles y no la media a propósito: la media esconde las pausas del recolector de basura, que es justo donde la JVM se diferencia de Go. Miden predictibilidad bajo carga, no velocidad promedio. Van los dos juntos porque uno solo no distingue una latencia alta sostenida de una con picos aislados: el p95 describe la experiencia habitual bajo carga, el p99 la cola. Si van pegados el servicio es estable; si el p99 se dispara sobre el p95, hay picos que el promedio no vería.",
           "type": "timeseries",
           "gridPos": {
             "h": 8,
@@ -810,6 +836,24 @@
               }
             },
             "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*p50"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "fill": "dot",
+                      "dash": [
+                        0,
+                        6
+                      ]
+                    }
+                  }
+                ]
+              },
               {
                 "matcher": {
                   "id": "byRegexp",
@@ -872,7 +916,16 @@
           },
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum by (job, le) (rate(http_request_duration_seconds_bucket[1m])))",
+              "expr": "histogram_quantile(0.50, sum by (job, le) (rate(http_request_duration_seconds_bucket[$__rate_interval])))",
+              "legendFormat": "{{job}} p50",
+              "refId": "C",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum by (job, le) (rate(http_request_duration_seconds_bucket[$__rate_interval])))",
               "legendFormat": "{{job}} p95",
               "refId": "A",
               "datasource": {
@@ -881,9 +934,430 @@
               }
             },
             {
-              "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket[1m])))",
+              "expr": "histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket[$__rate_interval])))",
               "legendFormat": "{{job}} p99",
               "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "id": 14,
+          "title": "Tasa de errores",
+          "description": "Fracción de peticiones que respondieron con status >= 400, sobre el total de cada tecnología. Es la señal de errores de las cuatro señales doradas. Lo esperado es 0 %; cualquier valor por encima invalida la corrida.",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 39
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 5
+              },
+              "min": 0
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-go.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "green"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-java.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "orange"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          },
+          "targets": [
+            {
+              "expr": "(sum by (job) (rate(http_errors_total[$__rate_interval])) or sum by (job) (rate(http_requests_total[$__rate_interval])) * 0) / sum by (job) (rate(http_requests_total[$__rate_interval]))",
+              "legendFormat": "{{job}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "id": 15,
+          "title": "Red del proceso",
+          "description": "Bytes por segundo recibidos y enviados por cada servicio, de process_network_*_bytes_total (InOctets y OutOctets de /proc/self/net/netstat, la misma fuente en las dos). Incluye el raspado de Prometheus: el /metrics de Java es más grande, así que su tráfico enviado sale algo más alto aunque /data responda lo mismo.",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 39
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 5
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*recibido"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "fill": "dash",
+                      "dash": [
+                        8,
+                        6
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-go.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "green"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-java.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "orange"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          },
+          "targets": [
+            {
+              "expr": "rate(process_network_receive_bytes_total{job=~\"api-go|api-java\"}[$__rate_interval])",
+              "legendFormat": "{{job}} recibido",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "expr": "rate(process_network_transmit_bytes_total{job=~\"api-go|api-java\"}[$__rate_interval])",
+              "legendFormat": "{{job}} enviado",
+              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "id": 16,
+          "title": "Saturación de CPU",
+          "description": "CPU usada como fracción del límite del contenedor (cpu_limit núcleos, igual a SERVICE_CPUS en compose). Es la señal de saturación: cerca del 100 % el servicio ya no puede absorber más carga y la latencia empieza a subir.",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 47
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 5
+              },
+              "min": 0,
+              "max": 1
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-go.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "green"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-java.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "orange"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          },
+          "targets": [
+            {
+              "expr": "rate(process_cpu_seconds_total{job=~\"api-go|api-java\"}[$__rate_interval]) / $cpu_limit",
+              "legendFormat": "{{job}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "id": 17,
+          "title": "Saturación de memoria",
+          "description": "Memoria residente como fracción del límite del contenedor (mem_limit_bytes, igual a SERVICE_MEMORY en compose). Cerca del 100 % el contenedor corre riesgo de que lo mate el OOM killer.",
+          "type": "timeseries",
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 8,
+            "y": 47
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 5
+              },
+              "min": 0,
+              "max": 1
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-go.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "green"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-java.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "orange"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "lastNotNull",
+                "max"
+              ]
+            }
+          },
+          "targets": [
+            {
+              "expr": "process_resident_memory_bytes{job=~\"api-go|api-java\"} / $mem_limit_bytes",
+              "legendFormat": "{{job}}",
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            }
+          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "id": 18,
+          "title": "Tiempo de arranque",
+          "description": "Segundos desde que arrancó el proceso hasta que el servidor acepta peticiones, de app_startup_duration_seconds. En Go se marca con el socket abierto; en Java con ApplicationReadyEvent, contando desde el arranque de la JVM. Es el valor del proceso actual: si se reinicia un servicio, cambia.",
+          "type": "stat",
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 16,
+            "y": 47
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "decimals": 3
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-go.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "green"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "api-java.*"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "mode": "fixed",
+                      "fixedColor": "orange"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "expr": "app_startup_duration_seconds{job=~\"api-go|api-java\"}",
+              "legendFormat": "{{job}}",
+              "refId": "A",
               "datasource": {
                 "type": "prometheus",
                 "uid": "prometheus"
@@ -906,19 +1380,19 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 55
       },
       "panels": [
         {
           "id": 13,
           "title": "Desglose de memoria por tecnología",
-          "description": "Qué hay dentro del total, sin agrupar: cada traza por separado para ver fluctuaciones exactas, picos del recolector de basura y fugas. En Go: heap del programa frente al residente. En Java: heap y nonheap de la JVM (el nonheap incluye metadatos de clases y el código que compila el JIT, y explica el grueso de la diferencia).",
+          "description": "Qué hay dentro del total, sin agrupar: cada traza por separado para ver fluctuaciones exactas, picos del recolector de basura y fugas. El heap sale de app_memory_usage_bytes, con el mismo significado en las dos: heap_total es lo reservado del sistema y heap_used lo ocupado por objetos. En Java se añade el nonheap de la JVM (metadatos de clases y el código que compila el JIT), que explica el grueso de la diferencia con Go.",
           "type": "timeseries",
           "gridPos": {
             "h": 10,
             "w": 24,
             "x": 0,
-            "y": 40
+            "y": 56
           },
           "fieldConfig": {
             "defaults": {
@@ -942,7 +1416,7 @@
           },
           "targets": [
             {
-              "expr": "sum(process_resident_memory_bytes{job=\"api-go\"})",
+              "expr": "sum(app_memory_usage_bytes{job=\"api-go\", type=\"rss\"})",
               "legendFormat": "GO — residente total",
               "refId": "A",
               "datasource": {
@@ -951,8 +1425,8 @@
               }
             },
             {
-              "expr": "sum(go_memstats_heap_inuse_bytes{job=\"api-go\"})",
-              "legendFormat": "GO — heap en uso",
+              "expr": "sum(app_memory_usage_bytes{job=\"api-go\", type=\"heap_total\"})",
+              "legendFormat": "GO — heap reservado",
               "refId": "B",
               "datasource": {
                 "type": "prometheus",
@@ -960,7 +1434,16 @@
               }
             },
             {
-              "expr": "sum(process_resident_memory_bytes{job=\"api-java\"})",
+              "expr": "sum(app_memory_usage_bytes{job=\"api-go\", type=\"heap_used\"})",
+              "legendFormat": "GO — heap usado",
+              "refId": "F",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "expr": "sum(app_memory_usage_bytes{job=\"api-java\", type=\"rss\"})",
               "legendFormat": "JAVA — residente total",
               "refId": "C",
               "datasource": {
@@ -969,9 +1452,18 @@
               }
             },
             {
-              "expr": "sum(jvm_memory_used_bytes{job=\"api-java\", area=\"heap\"})",
-              "legendFormat": "JAVA — heap JVM",
+              "expr": "sum(app_memory_usage_bytes{job=\"api-java\", type=\"heap_total\"})",
+              "legendFormat": "JAVA — heap reservado",
               "refId": "D",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              }
+            },
+            {
+              "expr": "sum(app_memory_usage_bytes{job=\"api-java\", type=\"heap_used\"})",
+              "legendFormat": "JAVA — heap usado",
+              "refId": "G",
               "datasource": {
                 "type": "prometheus",
                 "uid": "prometheus"

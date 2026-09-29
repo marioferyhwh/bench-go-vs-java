@@ -5,6 +5,8 @@ x-logging: &default-logging
     max-size: "100m"
     max-file: "5"
 
+# Versiones fijadas: con :latest dos corridas en días distintos podían medir
+# binarios distintos sin que nada lo avisara.
 services:
   postgres:
     build: ./database
@@ -29,6 +31,10 @@ services:
       - DATABASE_URL=postgres://apidatatest:nueva_contraseña@postgres:5432/postgres?sslmode=disable
       - DB_MAX_OPEN_CONNS=10
       - DB_MAX_IDLE_CONNS=10
+      # Techo blando de memoria para el runtime de Go, que no lee el límite
+      # del contenedor por sí solo. Es ~90 % de SERVICE_MEMORY: si se cambia
+      # uno, hay que mover el otro. Java hace lo mismo con MaxRAMPercentage.
+      - GOMEMLIMIT=${GO_MEMLIMIT:-460MiB}
     ports:
       - "8080:8080"
     # Mismo techo de CPU y RAM que java-service: sin esto la comparación
@@ -38,6 +44,18 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-2}"
           memory: "${SERVICE_MEMORY:-512m}"
+    # Marca el servicio como healthy en cuanto /metrics responde. Sirve para
+    # medir el arranque desde fuera (tiempo hasta healthy) y para que
+    # Prometheus no raspe antes de tiempo. start_interval sondea cada segundo
+    # solo mientras arranca; después baja a uno cada 30 s para no meter
+    # carga en el proceso medido.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/metrics"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 60s
+      start_interval: 1s
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,6 +71,10 @@ services:
       - DATABASE_PASSWORD=nueva_contraseña
       - DB_MAX_OPEN_CONNS=10
       - DB_MAX_IDLE_CONNS=10
+      # Por defecto la JVM solo usa el 25 % del límite del contenedor para el
+      # heap. Con 75 % aprovecha el mismo techo que Go, dejando margen para
+      # metaspace, hilos y buffers fuera del heap.
+      - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75
     ports:
       - "8081:8081"
     deploy:
@@ -60,6 +82,14 @@ services:
         limits:
           cpus: "${SERVICE_CPUS:-2}"
           memory: "${SERVICE_MEMORY:-512m}"
+    # Mismo healthcheck que go-service.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8081/metrics"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 60s
+      start_interval: 1s
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,27 +99,30 @@ services:
   # a rasparlo. k6 empuja aquí y Prometheus lo lee de este contenedor.
   # Sin volumen a propósito: cada corrida reemplaza a la anterior.
   pushgateway:
-    image: prom/pushgateway:latest
+    image: prom/pushgateway:v1.11.3
     container_name: pushgateway
     ports:
       - "9091:9091"
     logging: *default-logging
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.14.0
     container_name: prometheus
     ports:
       - "9090:9090"
     volumes:
       - ./analitics/prometheus.yml:/etc/prometheus/prometheus.yml
     depends_on:
-      - go-service
-      - java-service
-      - pushgateway
+      go-service:
+        condition: service_healthy
+      java-service:
+        condition: service_healthy
+      pushgateway:
+        condition: service_started
     logging: *default-logging
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.2.2
     container_name: grafana
     ports:
       - "3000:3000"
@@ -107,7 +140,7 @@ services:
   # No arranca con `up`: se lanza a demanda, normalmente con ./stress/stress.sh
   # Estos defectos son los mismos que usa el script y el escenario de k6.
   k6:
-    image: grafana/k6:latest
+    image: grafana/k6:2.3.0
     container_name: k6
     profiles: ["stress"]
     volumes:

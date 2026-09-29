@@ -8,7 +8,8 @@ RUN mvn -B dependency:go-offline
 COPY src ./src
 RUN mvn -B clean package -DskipTests
 
-FROM eclipse-temurin:21-jre-alpine
+# Misma versión de Alpine que la imagen de Go.
+FROM eclipse-temurin:21.0.12.1_1-jre-alpine-3.24
 WORKDIR /app
 COPY --from=builder /app/target/*.jar app.jar
 EXPOSE 8081
